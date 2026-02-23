@@ -9,6 +9,7 @@ namespace Client.Scripts;
 
 public partial class GameClient : Node
 {
+    [Export] public int MaxPlayers = 2;
     private TcpClient _tcpClient;
     private NetworkStream _stream;
     private bool _isConnected;

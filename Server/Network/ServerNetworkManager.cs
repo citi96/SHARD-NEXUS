@@ -11,7 +11,7 @@ namespace Server.Network;
 public class ServerNetworkManager
 {
     private const int Port = 7777;
-    private const int MaxClients = 8;
+    private readonly int _maxClients;
     private const int MaxMessageSize = 1_048_576; // 1 MB
     private const int AckTimeoutMs = 500;
     private const int AckMaxRetries = 3;
@@ -31,6 +31,11 @@ public class ServerNetworkManager
     public event Action<int>? OnClientDisconnected;
 
     // --- Lifecycle ---
+
+    public ServerNetworkManager(int maxClients)
+    {
+        _maxClients = maxClients;
+    }
 
     public void Start()
     {
@@ -101,7 +106,7 @@ public class ServerNetworkManager
             {
                 TcpClient client = await _listener!.AcceptTcpClientAsync();
 
-                if (_clients.Count >= MaxClients)
+                if (_clients.Count >= _maxClients)
                 {
                     Console.WriteLine("[Network] Connessione rifiutata: raggiunto il limite massimo di client.");
                     client.Close();
@@ -111,7 +116,7 @@ public class ServerNetworkManager
                 int clientId = Interlocked.Increment(ref _clientCounter);
                 if (_clients.TryAdd(clientId, client))
                 {
-                    Console.WriteLine($"[Network] Client {clientId} connesso da {client.Client.RemoteEndPoint}. ({_clients.Count}/{MaxClients})");
+                    Console.WriteLine($"[Network] Client {clientId} connesso da {client.Client.RemoteEndPoint}. ({_clients.Count}/{_maxClients})");
                     OnClientConnected?.Invoke(clientId);
                     _ = Task.Run(() => HandleClientAsync(clientId, client));
                 }
@@ -313,7 +318,7 @@ public class ServerNetworkManager
         {
             client.Close();
             OnClientDisconnected?.Invoke(clientId);
-            Console.WriteLine($"[Network] Connessione TCP chiusa per ID {clientId}. ({_clients.Count}/{MaxClients})");
+            Console.WriteLine($"[Network] Connessione TCP chiusa per ID {clientId}. ({_clients.Count}/{_maxClients})");
         }
     }
 

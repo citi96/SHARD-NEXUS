@@ -10,11 +10,11 @@ public class GameServer
     private LobbyManager _lobbyManager;
     private bool _isRunning;
 
-    public GameServer()
+    public GameServer(int maxPlayers)
     {
         _matchManager = new MatchManager();
-        _networkManager = new ServerNetworkManager();
-        _lobbyManager = new LobbyManager(_networkManager);
+        _networkManager = new ServerNetworkManager(maxPlayers);
+        _lobbyManager = new LobbyManager(_networkManager, maxPlayers);
     }
 
     public void Start()

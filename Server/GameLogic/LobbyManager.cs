@@ -8,14 +8,15 @@ namespace Server.GameLogic
 {
     public class LobbyManager
     {
-        private const int MaxPlayers = 8;
+        private readonly int _maxPlayers;
         private ConcurrentDictionary<int, string> _connectedPlayers;
         private ServerNetworkManager _network;
         
         public bool IsMatchStarted { get; private set; }
 
-        public LobbyManager(ServerNetworkManager network)
+        public LobbyManager(ServerNetworkManager network, int maxPlayers)
         {
+            _maxPlayers = maxPlayers;
             _connectedPlayers = new ConcurrentDictionary<int, string>();
             _network = network;
             _network.OnMessageReceived += HandleMessage;
@@ -38,7 +39,7 @@ namespace Server.GameLogic
         {
             if (_connectedPlayers.TryRemove(clientId, out string? playerName))
             {
-                Console.WriteLine($"[Lobby] Giocatore {playerName} (ID: {clientId}) ha lasciato la lobby. ({_connectedPlayers.Count}/{MaxPlayers})");
+                Console.WriteLine($"[Lobby] Giocatore {playerName} (ID: {clientId}) ha lasciato la lobby. ({_connectedPlayers.Count}/{_maxPlayers})");
             }
         }
 
@@ -51,7 +52,7 @@ namespace Server.GameLogic
                 return;
             }
 
-            if (_connectedPlayers.Count >= MaxPlayers)
+            if (_connectedPlayers.Count >= _maxPlayers)
             {
                 Console.WriteLine($"[Lobby] Rifiutato {playerName} (ID: {clientId}): Lobby piena.");
                 _network.DisconnectClient(clientId);
@@ -63,7 +64,7 @@ namespace Server.GameLogic
             
             if (_connectedPlayers.TryAdd(clientId, finalName))
             {
-                Console.WriteLine($"[Lobby] Giocatore {finalName} (ID: {clientId}) si è unito. ({_connectedPlayers.Count}/{MaxPlayers})");
+                Console.WriteLine($"[Lobby] Giocatore {finalName} (ID: {clientId}) si è unito. ({_connectedPlayers.Count}/{_maxPlayers})");
                 
                 // Opzionale: notifica il giocatore dell'avvenuto ingresso
                 var responseMsg = NetworkMessage.Create(MessageType.JoinLobbyResponse, new JoinLobbyMessage { PlayerName = finalName });
@@ -75,7 +76,7 @@ namespace Server.GameLogic
 
         private void CheckLobbyFull()
         {
-            if (_connectedPlayers.Count == MaxPlayers && !IsMatchStarted)
+            if (_connectedPlayers.Count == _maxPlayers && !IsMatchStarted)
             {
                 Console.WriteLine("[Lobby] Lobby piena! Avvio del match...");
                 IsMatchStarted = true;
