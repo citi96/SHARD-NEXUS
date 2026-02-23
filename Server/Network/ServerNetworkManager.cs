@@ -3,6 +3,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
+using System.Text;
+using Shared.Network.Messages;
 
 namespace Server.Network
 {
@@ -14,6 +16,9 @@ namespace Server.Network
         private ConcurrentDictionary<int, TcpClient> _clients;
         private int _clientCounter;
         private bool _isRunning;
+
+        public event Action<int, NetworkMessage>? OnMessageReceived;
+        public event Action<int>? OnClientDisconnected;
 
         public ServerNetworkManager()
         {
@@ -31,7 +36,6 @@ namespace Server.Network
                 _isRunning = true;
                 Console.WriteLine($"[Network] Server in ascolto sulla porta {Port}...");
 
-                // Inizia ad accettare i client in modo asincrono
                 Task.Run(AcceptClientsAsync);
             }
             catch (Exception ex)
@@ -96,40 +100,98 @@ namespace Server.Network
         private async Task HandleClientAsync(int clientId, TcpClient client)
         {
             NetworkStream stream = client.GetStream();
-            byte[] buffer = new byte[4096];
+            byte[] lengthBuffer = new byte[4];
 
             try
             {
                 while (_isRunning && client.Connected)
                 {
-                    int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                    
-                    if (bytesRead == 0)
+                    // Leggi la lunghezza del messaggio (4 bytes)
+                    int lengthBytesRead = await stream.ReadAsync(lengthBuffer, 0, 4);
+                    if (lengthBytesRead == 0) break;
+
+                    int jsonLength = BitConverter.ToInt32(lengthBuffer, 0);
+                    if (jsonLength <= 0 || jsonLength > 1048576) // Max 1MB
                     {
-                        // Disconnessione
+                        Console.WriteLine($"[Network] Lunghezza messaggio non valida dal Client {clientId}");
                         break;
                     }
 
-                    // TODO: Processare i dati ricevuti (pacchetti minimi)
-                    Console.WriteLine($"[Network] Ricevuti {bytesRead} bytes dal Client {clientId}");
+                    // Leggi i dati JSON
+                    byte[] jsonBuffer = new byte[jsonLength];
+                    int totalRead = 0;
+                    while (totalRead < jsonLength)
+                    {
+                        int read = await stream.ReadAsync(jsonBuffer, totalRead, jsonLength - totalRead);
+                        if (read == 0) throw new Exception("Connessione chiusa durante la lettura.");
+                        totalRead += read;
+                    }
+
+                    string json = Encoding.UTF8.GetString(jsonBuffer);
+                    var message = NetworkMessage.FromJson(json);
+                    
+                    if (message != null)
+                    {
+                        OnMessageReceived?.Invoke(clientId, message);
+                    }
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Network] Errore o disconnessione forzata Client {clientId}: {ex.Message}");
-            }
+            catch (Exception) { /* disconnessione o errore lettura */ }
             finally
             {
                 DisconnectClient(clientId);
             }
         }
 
+        public void SendMessage(int clientId, NetworkMessage message)
+        {
+            if (_clients.TryGetValue(clientId, out TcpClient? client))
+            {
+                try
+                {
+                    string json = message.ToJson();
+                    byte[] payload = Encoding.UTF8.GetBytes(json);
+                    byte[] lengthPrefix = BitConverter.GetBytes(payload.Length);
+
+                    NetworkStream stream = client.GetStream();
+                    stream.Write(lengthPrefix, 0, lengthPrefix.Length);
+                    stream.Write(payload, 0, payload.Length);
+                }
+                catch
+                {
+                    DisconnectClient(clientId);
+                }
+            }
+        }
+
+        public void BroadcastMessage(NetworkMessage message)
+        {
+            string json = message.ToJson();
+            byte[] payload = Encoding.UTF8.GetBytes(json);
+            byte[] lengthPrefix = BitConverter.GetBytes(payload.Length);
+
+            foreach (var kvp in _clients)
+            {
+                try
+                {
+                    NetworkStream stream = kvp.Value.GetStream();
+                    stream.Write(lengthPrefix, 0, lengthPrefix.Length);
+                    stream.Write(payload, 0, payload.Length);
+                }
+                catch
+                {
+                    DisconnectClient(kvp.Key);
+                }
+            }
+        }
+
         public void DisconnectClient(int clientId)
         {
-            if (_clients.TryRemove(clientId, out TcpClient client))
+            if (_clients.TryRemove(clientId, out TcpClient? client))
             {
                 client.Close();
-                Console.WriteLine($"[Network] Client {clientId} disconnesso. ({_clients.Count}/{MaxClients})");
+                OnClientDisconnected?.Invoke(clientId);
+                Console.WriteLine($"[Network] Connessione TCP chiusa per ID {clientId}. ({_clients.Count}/{MaxClients})");
             }
         }
     }

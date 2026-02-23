@@ -1,4 +1,5 @@
 using Server.Network;
+using Server.GameLogic;
 
 namespace Server
 {
@@ -6,11 +7,13 @@ namespace Server
     {
         private MatchManager _matchManager;
         private ServerNetworkManager _networkManager;
+        private LobbyManager _lobbyManager;
 
         public GameServer()
         {
             _matchManager = new MatchManager();
             _networkManager = new ServerNetworkManager();
+            _lobbyManager = new LobbyManager(_networkManager);
         }
 
         public void Start()
