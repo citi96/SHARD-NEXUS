@@ -13,13 +13,17 @@ public class GameServer
     private ServerNetworkManager _networkManager;
     private LobbyManager _lobbyManager;
     private EchoPoolManager _echoPoolManager;
+    private PlayerManager _playerManager;
+    private ShopManager _shopManager;
     private bool _isRunning;
 
-    public GameServer(int maxPlayers, int port, int ackTimeoutMs, int ackMaxRetries, EchoPoolSettings echoPoolSettings)
+    public GameServer(int maxPlayers, int port, int ackTimeoutMs, int ackMaxRetries, EchoPoolSettings echoPoolSettings, ShopSettings shopSettings)
     {
         _matchManager = new MatchManager();
         _networkManager = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
         _lobbyManager = new LobbyManager(_networkManager, maxPlayers);
+        
+        _playerManager = new PlayerManager();
 
         // Mock Catalog for Echo Pool initialization
         var mockCatalog = new List<EchoDefinition>
@@ -32,6 +36,42 @@ public class GameServer
         };
 
         _echoPoolManager = new EchoPoolManager(echoPoolSettings, mockCatalog);
+        _shopManager = new ShopManager(shopSettings, _echoPoolManager, _playerManager, mockCatalog);
+
+        // Wiring up the Shop events
+        _shopManager.OnShopUpdated += (playerId, msg) => _networkManager.SendMessage(playerId, msg);
+        
+        // Listen to client messages
+        _networkManager.OnMessageReceived += HandleMessage;
+        _networkManager.OnClientConnected += HandleClientConnected;
+        _networkManager.OnClientDisconnected += _playerManager.RemovePlayer;
+    }
+
+    private void HandleClientConnected(int clientId)
+    {
+        // For testing purposes, initialize player state immediately upon connection.
+        // In reality, this would happen when a match starts.
+        _playerManager.InitializePlayer(clientId);
+        
+        // Give them an initial shop just so we have something on screen!
+        _shopManager.GenerateShop(clientId);
+    }
+
+    private void HandleMessage(int clientId, Shared.Network.Messages.NetworkMessage message)
+    {
+        switch (message.Type)
+        {
+            case Shared.Network.Messages.MessageType.RefreshShop:
+                _shopManager.HandleRefresh(clientId);
+                break;
+            case Shared.Network.Messages.MessageType.BuyEcho:
+                var buyMsg = message.DeserializePayload<Shared.Network.Messages.BuyEchoMessage>();
+                if (buyMsg != null)
+                {
+                    _shopManager.HandleBuy(clientId, buyMsg.ShopSlot);
+                }
+                break;
+        }
     }
 
     public void Start()
