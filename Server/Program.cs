@@ -15,9 +15,11 @@ class Program
         int port = config.GetValue<int>("GameSettings:Port", 7777);
         int ackTimeoutMs = config.GetValue<int>("GameSettings:AckTimeoutMs", 500);
         int ackMaxRetries = config.GetValue<int>("GameSettings:AckMaxRetries", 3);
+        
+        var echoPoolSettings = config.GetSection("EchoPoolSettings").Get<Server.Configuration.EchoPoolSettings>() ?? new Server.Configuration.EchoPoolSettings();
 
         Console.WriteLine($"Avvio del server SHARD NEXUS (Port: {port}, Max Players: {maxPlayers})...");
-        GameServer server = new GameServer(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
+        GameServer server = new GameServer(maxPlayers, port, ackTimeoutMs, ackMaxRetries, echoPoolSettings);
 
         // Graceful shutdown via Ctrl+C
         Console.CancelKeyPress += (_, e) =>

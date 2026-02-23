@@ -9,6 +9,7 @@ namespace Shared.Models.Structs;
 public readonly record struct EchoDefinition(
     int Id,
     string Name,
+    Rarity Rarity,
     EchoClass Class,
     Resonance Resonance,
     int BaseHealth,
