@@ -44,10 +44,11 @@ public class ServerNetworkManager
     {
         try
         {
-            _listener = new TcpListener(IPAddress.Any, _port);
+            _listener = new TcpListener(IPAddress.IPv6Any, _port);
+            _listener.Server.DualMode = true;
             _listener.Start();
             _isRunning = true;
-            Console.WriteLine($"[Network] Server in ascolto sulla porta {_port}...");
+            Console.WriteLine($"[Network] Server in ascolto sulla porta {_port} (DualStack)...");
             Task.Run(AcceptClientsAsync);
         }
         catch (Exception ex)

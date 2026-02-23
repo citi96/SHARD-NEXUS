@@ -1,13 +1,20 @@
-[gd_scene load_steps=2 format=3 uid="uid://bxxxx"]
+[gd_scene format=3 uid="uid://bxxxx"]
 
-[ext_resource type="Script" path="res://Scripts/GameClient.cs" id="1_gclient"]
+[ext_resource type="Script" uid="uid://cetixlr3q48lc" path="res://Scripts/GameClient.cs" id="1_gclient"]
 
-[node name="Main" type="Node"]
+[node name="Main" type="Node" unique_id=296357644 node_paths=PackedStringArray("LoginPanel", "NameInput", "JoinButton", "StatusLabel", "LobbyPanel", "PlayersContainer", "ReadyButton")]
 script = ExtResource("1_gclient")
+LoginPanel = NodePath("UI/Panel")
+NameInput = NodePath("UI/Panel/NameInput")
+JoinButton = NodePath("UI/Panel/JoinButton")
+StatusLabel = NodePath("UI/Panel/StatusLabel")
+LobbyPanel = NodePath("UI/LobbyPanel")
+PlayersContainer = NodePath("UI/LobbyPanel/PlayersContainer")
+ReadyButton = NodePath("UI/LobbyPanel/ReadyButton")
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1541276748]
 
-[node name="UI" type="Control" parent="."]
+[node name="UI" type="Control" parent="." unique_id=1712027575]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -15,7 +22,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Panel" type="Panel" parent="UI"]
+[node name="Panel" type="Panel" parent="UI" unique_id=984999868]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -23,7 +30,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="StatusLabel" type="Label" parent="UI/Panel"]
+[node name="StatusLabel" type="Label" parent="UI/Panel" unique_id=439578208]
 layout_mode = 1
 anchors_preset = 14
 anchor_top = 0.5
@@ -33,12 +40,12 @@ offset_top = -26.0
 offset_bottom = 26.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_font_sizes/font_size = 32
 text = "Connessione al server in corso..."
 horizontal_alignment = 1
 vertical_alignment = 1
-theme_override_font_sizes/font_size = 32
 
-[node name="NameInput" type="LineEdit" parent="UI/Panel"]
+[node name="NameInput" type="LineEdit" parent="UI/Panel" unique_id=571158071]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -54,7 +61,7 @@ grow_vertical = 2
 placeholder_text = "Inserisci nome giocatore"
 alignment = 1
 
-[node name="JoinButton" type="Button" parent="UI/Panel"]
+[node name="JoinButton" type="Button" parent="UI/Panel" unique_id=1178138299]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -68,3 +75,41 @@ offset_bottom = 150.0
 grow_horizontal = 2
 grow_vertical = 2
 text = "Connetti alla Lobby"
+
+[node name="LobbyPanel" type="Panel" parent="UI" unique_id=1301928490]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PlayersContainer" type="VBoxContainer" parent="UI/LobbyPanel" unique_id=1292689241]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -150.0
+offset_right = 200.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ReadyButton" type="Button" parent="UI/LobbyPanel" unique_id=467530950]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -100.0
+offset_top = -100.0
+offset_right = 100.0
+offset_bottom = -50.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "Pronto"

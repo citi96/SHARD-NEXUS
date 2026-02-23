@@ -9,83 +9,171 @@ namespace Server.GameLogic
     public class LobbyManager
     {
         private readonly int _maxPlayers;
-        private ConcurrentDictionary<int, string> _connectedPlayers;
-        private ServerNetworkManager _network;
+        private readonly ConcurrentDictionary<int, LobbyPlayerInfo> _players;
+        private readonly ServerNetworkManager _network;
         
         public bool IsMatchStarted { get; private set; }
+        private float _countdownTimer = -1f;
 
         public LobbyManager(ServerNetworkManager network, int maxPlayers)
         {
             _maxPlayers = maxPlayers;
-            _connectedPlayers = new ConcurrentDictionary<int, string>();
+            _players = new ConcurrentDictionary<int, LobbyPlayerInfo>();
             _network = network;
+            
             _network.OnMessageReceived += HandleMessage;
             _network.OnClientDisconnected += HandleDisconnect;
         }
 
+        public void Update(float delta)
+        {
+            if (IsMatchStarted || _countdownTimer < 0) return;
+
+            _countdownTimer -= delta;
+
+            if (_countdownTimer <= 0)
+            {
+                StartMatch();
+            }
+            else
+            {
+                // Optionally broadcast countdown updates every second if needed, 
+                // but clients can also simulate it locally if we send the start time.
+                // For now, we'll send periodic updates if preferred, or just rely on the first LobbyStateMessage Broadcast.
+            }
+        }
+
+        private void StartMatch()
+        {
+            Console.WriteLine("[Lobby] Countdown terminato! Avvio del match...");
+            IsMatchStarted = true;
+            _countdownTimer = -1f;
+            
+            var startMsg = NetworkMessage.Create(MessageType.StartRound, new StartRoundMessage { RoundNumber = 1 });
+            _network.BroadcastMessage(startMsg);
+            
+            // TODO: Notifica il MatchManager
+        }
+
         private void HandleMessage(int clientId, NetworkMessage message)
         {
-            if (message.Type == MessageType.JoinLobby)
+            switch (message.Type)
             {
-                var joinMsg = message.DeserializePayload<JoinLobbyMessage>();
-                if (joinMsg != null)
-                {
-                    OnPlayerJoined(clientId, joinMsg.PlayerName);
-                }
+                case MessageType.JoinLobby:
+                    var joinMsg = message.DeserializePayload<JoinLobbyMessage>();
+                    if (joinMsg != null)
+                    {
+                        OnPlayerJoined(clientId, joinMsg.PlayerName);
+                    }
+                    break;
+
+                case MessageType.ReadyUp:
+                    var readyMsg = message.DeserializePayload<ReadyUpMessage>();
+                    if (readyMsg != null)
+                    {
+                        OnPlayerReadyStateChanged(clientId, readyMsg.IsReady);
+                    }
+                    break;
             }
         }
 
         private void HandleDisconnect(int clientId)
         {
-            if (_connectedPlayers.TryRemove(clientId, out string? playerName))
+            if (_players.TryRemove(clientId, out var playerInfo))
             {
-                Console.WriteLine($"[Lobby] Giocatore {playerName} (ID: {clientId}) ha lasciato la lobby. ({_connectedPlayers.Count}/{_maxPlayers})");
+                Console.WriteLine($"[Lobby] Giocatore {playerInfo.PlayerName} (ID: {clientId}) ha lasciato la lobby. ({_players.Count}/{_maxPlayers})");
+                ResetCountdown();
+                BroadcastLobbyState();
             }
         }
 
-        private void OnPlayerJoined(int clientId, string playerName)
+        private void OnPlayerJoined(int clientId, string originalName)
         {
             if (IsMatchStarted)
             {
-                Console.WriteLine($"[Lobby] Rifiutato {playerName} (ID: {clientId}): Match già in corso.");
+                Console.WriteLine($"[Lobby] Rifiutato (ID: {clientId}): Match già in corso.");
                 _network.DisconnectClient(clientId);
                 return;
             }
 
-            if (_connectedPlayers.Count >= _maxPlayers)
+            if (_players.Count >= _maxPlayers)
             {
-                Console.WriteLine($"[Lobby] Rifiutato {playerName} (ID: {clientId}): Lobby piena.");
+                Console.WriteLine($"[Lobby] Rifiutato (ID: {clientId}): Lobby piena.");
                 _network.DisconnectClient(clientId);
                 return;
             }
 
-            // Usa un nome di default se vuoto
-            string finalName = string.IsNullOrWhiteSpace(playerName) ? $"Player_{clientId}" : playerName;
-            
-            if (_connectedPlayers.TryAdd(clientId, finalName))
+            string playerName = string.IsNullOrWhiteSpace(originalName) ? $"Player_{clientId}" : originalName;
+            var playerInfo = new LobbyPlayerInfo
             {
-                Console.WriteLine($"[Lobby] Giocatore {finalName} (ID: {clientId}) si è unito. ({_connectedPlayers.Count}/{_maxPlayers})");
+                PlayerId = clientId,
+                PlayerName = playerName,
+                IsReady = false
+            };
+
+            if (_players.TryAdd(clientId, playerInfo))
+            {
+                Console.WriteLine($"[Lobby] Giocatore {playerName} (ID: {clientId}) si è unito. ({_players.Count}/{_maxPlayers})");
                 
-                // Opzionale: notifica il giocatore dell'avvenuto ingresso
-                var responseMsg = NetworkMessage.Create(MessageType.JoinLobbyResponse, new JoinLobbyMessage { PlayerName = finalName });
+                var responseMsg = NetworkMessage.Create(MessageType.JoinLobbyResponse, new JoinLobbyMessage { PlayerName = playerName });
                 _network.SendMessage(clientId, responseMsg);
 
-                CheckLobbyFull();
+                BroadcastLobbyState();
             }
         }
 
-        private void CheckLobbyFull()
+        private void OnPlayerReadyStateChanged(int clientId, bool isReady)
         {
-            if (_connectedPlayers.Count == _maxPlayers && !IsMatchStarted)
+            if (IsMatchStarted) return;
+
+            if (_players.TryGetValue(clientId, out var playerInfo))
             {
-                Console.WriteLine("[Lobby] Lobby piena! Avvio del match...");
-                IsMatchStarted = true;
+                playerInfo.IsReady = isReady;
+                Console.WriteLine($"[Lobby] Giocatore {playerInfo.PlayerName} (ID: {clientId}) è ora {(isReady ? "Ready" : "Not Ready")}.");
                 
-                var startMsg = NetworkMessage.Create(MessageType.StartRound, new StartRoundMessage { RoundNumber = 1 });
-                _network.BroadcastMessage(startMsg);
-                
-                // TODO: Notifica il MatchManager
+                CheckLobbyReady();
+                BroadcastLobbyState();
             }
+        }
+
+        private void CheckLobbyReady()
+        {
+            if (_players.Count < _maxPlayers)
+            {
+                ResetCountdown();
+                return;
+            }
+
+            bool allReady = _players.Values.All(p => p.IsReady);
+
+            if (allReady && _countdownTimer < 0)
+            {
+                Console.WriteLine("[Lobby] Tutti i giocatori sono pronti. Avvio countdown (5s)...");
+                _countdownTimer = 5.0f;
+            }
+            else if (!allReady && _countdownTimer >= 0)
+            {
+                Console.WriteLine("[Lobby] Giocatore non più pronto. Countdown interrotto.");
+                ResetCountdown();
+            }
+        }
+
+        private void ResetCountdown()
+        {
+            _countdownTimer = -1f;
+        }
+
+        public void BroadcastLobbyState()
+        {
+            var msg = new LobbyStateMessage
+            {
+                Players = _players.Values.ToList(),
+                AllReady = _players.Count == _maxPlayers && _players.Values.All(p => p.IsReady),
+                CountdownRemaining = _countdownTimer
+            };
+
+            var networkMsg = NetworkMessage.Create(MessageType.LobbyState, msg);
+            _network.BroadcastMessage(networkMsg);
         }
     }
 }

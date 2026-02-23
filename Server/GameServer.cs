@@ -32,9 +32,17 @@ public class GameServer
     {
         Start();
 
+        long lastTick = Environment.TickCount64;
+
         while (_isRunning)
         {
+            long currentTick = Environment.TickCount64;
+            float delta = (currentTick - lastTick) / 1000f;
+            lastTick = currentTick;
+
             _networkManager.Update();
+            _lobbyManager.Update(delta);
+            
             await Task.Delay(16); // ~60 Hz tick
         }
 

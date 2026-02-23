@@ -18,9 +18,21 @@ public partial class GameClient : Node
     private NetworkStream _stream;
     private bool _isConnected;
     
-    private Label _statusLabel;
-    private LineEdit _nameInput;
-    private Button _joinButton;
+    // UI Elements - Login
+    [ExportGroup("UI - Login")]
+    [Export] public Control LoginPanel;
+    [Export] public LineEdit NameInput;
+    [Export] public Button JoinButton;
+    [Export] public Label StatusLabel;
+
+    // UI Elements - Lobby
+    [ExportGroup("UI - Lobby")]
+    [Export] public Control LobbyPanel;
+    [Export] public VBoxContainer PlayersContainer;
+    [Export] public Button ReadyButton;
+
+    // State
+    private bool _isReady = false;
 
     // Ping/Pong
     private float _pingTimer = 0f;
@@ -29,12 +41,43 @@ public partial class GameClient : Node
 
     public override void _Ready()
     {
-        _statusLabel = GetNode<Label>("UI/Panel/StatusLabel");
-        _nameInput = GetNode<LineEdit>("UI/Panel/NameInput");
-        _joinButton = GetNode<Button>("UI/Panel/JoinButton");
+        if (JoinButton != null) JoinButton.Pressed += OnJoinButtonPressed;
+        if (ReadyButton != null) ReadyButton.Pressed += OnReadyButtonPressed;
 
-        _joinButton.Pressed += OnJoinButtonPressed;
-        _statusLabel.Text = "Inserisci il nome e connettiti.";
+        if (StatusLabel != null) StatusLabel.Text = "Inserisci il nome e connettiti.";
+        
+        if (LoginPanel != null) LoginPanel.Show();
+        if (LobbyPanel != null) LobbyPanel.Hide();
+
+        InitializeEmptySlots();
+    }
+
+    private void InitializeEmptySlots()
+    {
+        if (PlayersContainer == null) return;
+
+        // Rimuove eventuali nodi esistenti
+        foreach (Node child in PlayersContainer.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        // Crea MaxPlayers slot vuoti
+        for (int i = 0; i < MaxPlayers; i++)
+        {
+            var label = new Label();
+            label.Text = $"Slot {i + 1}: Vuoto";
+            PlayersContainer.AddChild(label);
+        }
+    }
+
+    private void OnReadyButtonPressed()
+    {
+        _isReady = !_isReady;
+        if (ReadyButton != null) ReadyButton.Text = _isReady ? "Annulla Pronto" : "Pronto";
+
+        var readyMsg = NetworkMessage.Create(MessageType.ReadyUp, new ReadyUpMessage { IsReady = _isReady });
+        SendMessage(readyMsg);
     }
 
     public override void _Process(double delta)
@@ -56,29 +99,31 @@ public partial class GameClient : Node
         SendMessage(pingMsg);
     }
 
-    private void OnJoinButtonPressed()
+    private async void OnJoinButtonPressed()
     {
-        string playerName = _nameInput.Text.Trim();
+        string playerName = NameInput?.Text.Trim() ?? "";
         if (string.IsNullOrEmpty(playerName))
         {
-            _statusLabel.Text = "Il nome non può essere vuoto!";
+            if (StatusLabel != null) StatusLabel.Text = "Il nome non può essere vuoto!";
             return;
         }
 
-        _nameInput.Editable = false;
-        _joinButton.Disabled = true;
+        if (NameInput != null) NameInput.Editable = false;
+        if (JoinButton != null) JoinButton.Disabled = true;
         
-        ConnectToServer(playerName);
+        await ConnectToServerAsync(playerName);
     }
 
-    private void ConnectToServer(string playerName)
+    private async Task ConnectToServerAsync(string playerName)
     {
-        _statusLabel.Text = "Connessione al server...";
+        if (StatusLabel != null) StatusLabel.Text = "Connessione al server...";
         
         try
         {
             _tcpClient = new TcpClient();
-            _tcpClient.Connect(ServerIp, ServerPort);
+            // ConnectAsync prevents freezing the main thread
+            await _tcpClient.ConnectAsync(ServerIp, ServerPort);
+            
             _stream = _tcpClient.GetStream();
             _isConnected = true;
 
@@ -88,13 +133,15 @@ public partial class GameClient : Node
             // Invia il messaggio di JoinLobby
             var joinMsg = NetworkMessage.Create(MessageType.JoinLobby, new JoinLobbyMessage { PlayerName = playerName });
             SendMessage(joinMsg);
+            
+            GD.Print($"[Network] Connesso al server {ServerIp}:{ServerPort}");
         }
         catch (Exception ex)
         {
-            _statusLabel.Text = "Impossibile connettersi al server.";
+            if (StatusLabel != null) StatusLabel.Text = "Errore: " + ex.Message;
             GD.PrintErr("Errore di connessione: ", ex.Message);
-            _nameInput.Editable = true;
-            _joinButton.Disabled = false;
+            if (NameInput != null) NameInput.Editable = true;
+            if (JoinButton != null) JoinButton.Disabled = false;
         }
     }
 
@@ -176,8 +223,7 @@ public partial class GameClient : Node
                 {
                     long now = DateTime.UtcNow.Ticks;
                     _currentLatencyMs = (int)((now - pongResp.OriginalTimestamp) / TimeSpan.TicksPerMillisecond);
-                    // Update status label to show current ping if we are in a waiting state
-                    if (_statusLabel.Text.Contains("In attesa") || _statusLabel.Text.Contains("giocatori"))
+                    if (StatusLabel != null && (StatusLabel.Text.Contains("attesa") || StatusLabel.Text.Contains("giocatori") || StatusLabel.Text.Contains("Lobby")))
                     {
                          UpdateStatusWithPing();
                     }
@@ -186,41 +232,102 @@ public partial class GameClient : Node
 
             case MessageType.JoinLobbyResponse:
                 var joinResp = message.DeserializePayload<JoinLobbyMessage>();
-                _statusLabel.Text = $"In attesa di giocatori... ({joinResp?.PlayerName}){pingSuffix}";
-                _nameInput.Hide();
-                _joinButton.Hide();
+                if (StatusLabel != null) StatusLabel.Text = $"Connesso come {joinResp?.PlayerName}. Attendere...{pingSuffix}";
+                if (LoginPanel != null) LoginPanel.Hide();
+                if (LobbyPanel != null) LobbyPanel.Show();
+                break;
+
+            case MessageType.LobbyState:
+                var lobbyState = message.DeserializePayload<LobbyStateMessage>();
+                if (lobbyState != null)
+                {
+                    UpdateLobbyUI(lobbyState);
+                }
                 break;
 
             case MessageType.StartRound:
                 var startMsg = message.DeserializePayload<StartRoundMessage>();
-                _statusLabel.Text = $"MATCH INIZIATO! Round {startMsg?.RoundNumber}{pingSuffix}";
+                if (StatusLabel != null) StatusLabel.Text = $"MATCH INIZIATO! Round {startMsg?.RoundNumber}{pingSuffix}";
+                if (LobbyPanel != null) LobbyPanel.Hide();
                 GD.Print("Match Avviato dal Server!");
                 break;
         }
     }
 
+    private void UpdateLobbyUI(LobbyStateMessage state)
+    {
+        if (PlayersContainer == null) return;
+
+        // Clear existing slots first
+        foreach (Node child in PlayersContainer.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        // Fill slots with connected players
+        int i = 0;
+        foreach (var player in state.Players)
+        {
+            var label = new Label();
+            string readyText = player.IsReady ? "[Pronto]" : "[In Attesa]";
+            label.Text = $"Slot {i + 1}: {player.PlayerName} {readyText}";
+            PlayersContainer.AddChild(label);
+            i++;
+        }
+
+        // Fill remaining empty slots
+        for (; i < MaxPlayers; i++)
+        {
+            var label = new Label();
+            label.Text = $"Slot {i + 1}: Vuoto";
+            PlayersContainer.AddChild(label);
+        }
+
+        // Update overall status
+        if (StatusLabel != null)
+        {
+            if (state.CountdownRemaining >= 0)
+            {
+                StatusLabel.Text = $"Il match inizia in: {MathF.Ceiling(state.CountdownRemaining)}... ({_currentLatencyMs}ms)";
+            }
+            else if (state.AllReady)
+            {
+                StatusLabel.Text = $"Lobby Pronta. In attesa del server... ({_currentLatencyMs}ms)";
+            }
+            else
+            {
+                StatusLabel.Text = $"Lobby ({state.Players.Count}/{MaxPlayers}). In attesa di tutti i giocatori... ({_currentLatencyMs}ms)";
+            }
+        }
+    }
+
     private void UpdateStatusWithPing()
     {
-        string currentText = _statusLabel.Text;
+        if (StatusLabel == null) return;
+        string currentText = StatusLabel.Text;
         int lastParen = currentText.LastIndexOf(" (");
         if (lastParen != -1 && currentText.EndsWith("ms)"))
         {
             currentText = currentText.Substring(0, lastParen);
         }
-        _statusLabel.Text = $"{currentText} ({_currentLatencyMs}ms)";
+        StatusLabel.Text = $"{currentText} ({_currentLatencyMs}ms)";
     }
 
     private void Disconnect()
     {
         _isConnected = false;
         _currentLatencyMs = -1;
+        _isReady = false;
         _stream?.Close();
         _tcpClient?.Close();
-        _statusLabel.Text = "Disconnesso dal server.";
-        _nameInput.Editable = true;
-        _joinButton.Disabled = false;
-        _nameInput.Show();
-        _joinButton.Show();
+        
+        if (StatusLabel != null) StatusLabel.Text = "Disconnesso dal server.";
+        if (NameInput != null) NameInput.Editable = true;
+        if (JoinButton != null) JoinButton.Disabled = false;
+        if (ReadyButton != null) ReadyButton.Text = "Pronto";
+        
+        if (LoginPanel != null) LoginPanel.Show();
+        if (LobbyPanel != null) LobbyPanel.Hide();
     }
     
     public override void _ExitTree()
