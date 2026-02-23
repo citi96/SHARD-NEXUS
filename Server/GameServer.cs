@@ -3,6 +3,7 @@ using Server.GameLogic;
 using Server.Configuration;
 using Shared.Models.Structs;
 using Shared.Models.Enums;
+using Shared.Network.Messages;
 using System.Collections.Generic;
 
 namespace Server;
@@ -17,13 +18,13 @@ public class GameServer
     private ShopManager _shopManager;
     private bool _isRunning;
 
-    public GameServer(int maxPlayers, int port, int ackTimeoutMs, int ackMaxRetries, EchoPoolSettings echoPoolSettings, ShopSettings shopSettings)
+    public GameServer(int maxPlayers, int port, int ackTimeoutMs, int ackMaxRetries, EchoPoolSettings echoPoolSettings, ShopSettings shopSettings, PlayerSettings playerSettings)
     {
         _matchManager = new MatchManager();
         _networkManager = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
         _lobbyManager = new LobbyManager(_networkManager, maxPlayers);
         
-        _playerManager = new PlayerManager();
+        _playerManager = new PlayerManager(playerSettings);
 
         // Mock Catalog for Echo Pool initialization
         var mockCatalog = new List<EchoDefinition>
@@ -38,9 +39,29 @@ public class GameServer
         _echoPoolManager = new EchoPoolManager(echoPoolSettings, mockCatalog);
         _shopManager = new ShopManager(shopSettings, _echoPoolManager, _playerManager, mockCatalog);
 
-        // Wiring up the Shop events
+        // Wiring up events
         _shopManager.OnShopUpdated += (playerId, msg) => _networkManager.SendMessage(playerId, msg);
         
+        _playerManager.OnPlayerStateChanged += (playerId, state) => 
+        {
+            // Send full state to the owner
+            var updateMsg = NetworkMessage.Create(Shared.Network.Messages.MessageType.PlayerStateUpdate, new Shared.Network.Messages.PlayerStateUpdateMessage { State = state });
+            _networkManager.SendMessage(playerId, updateMsg);
+
+            // Send partial state to everyone else
+            var otherInfo = NetworkMessage.Create(MessageType.OtherPlayerInfo, new OtherPlayerInfoMessage
+            {
+                PlayerId = playerId,
+                NexusHealth = state.NexusHealth,
+                Level = state.Level,
+                WinStreak = state.WinStreak,
+                LossStreak = state.LossStreak
+            });
+            
+            // Broadcast to all connected clients. Clients should ignore updates where PlayerId matches their own.
+            _networkManager.BroadcastMessage(otherInfo);
+        };
+
         // Listen to client messages
         _networkManager.OnMessageReceived += HandleMessage;
         _networkManager.OnClientConnected += HandleClientConnected;

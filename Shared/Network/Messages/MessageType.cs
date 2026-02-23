@@ -33,6 +33,7 @@ public enum MessageType : byte
     CombatEnded = 59,
     PlayerEliminated = 60,
     GameEnded = 61,
+    OtherPlayerInfo = 62,
 
     // --- Errors ---
     Error = 255
