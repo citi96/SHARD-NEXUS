@@ -12,9 +12,12 @@ class Program
             .Build();
 
         int maxPlayers = config.GetValue<int>("GameSettings:MaxPlayers", 2);
+        int port = config.GetValue<int>("GameSettings:Port", 7777);
+        int ackTimeoutMs = config.GetValue<int>("GameSettings:AckTimeoutMs", 500);
+        int ackMaxRetries = config.GetValue<int>("GameSettings:AckMaxRetries", 3);
 
-        Console.WriteLine($"Avvio del server SHARD NEXUS (Max Players: {maxPlayers})...");
-        GameServer server = new GameServer(maxPlayers);
+        Console.WriteLine($"Avvio del server SHARD NEXUS (Port: {port}, Max Players: {maxPlayers})...");
+        GameServer server = new GameServer(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
 
         // Graceful shutdown via Ctrl+C
         Console.CancelKeyPress += (_, e) =>

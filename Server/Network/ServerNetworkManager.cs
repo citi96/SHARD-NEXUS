@@ -10,11 +10,11 @@ namespace Server.Network;
 
 public class ServerNetworkManager
 {
-    private const int Port = 7777;
+    private readonly int _port;
     private readonly int _maxClients;
+    private readonly int _ackTimeoutMs;
+    private readonly int _ackMaxRetries;
     private const int MaxMessageSize = 1_048_576; // 1 MB
-    private const int AckTimeoutMs = 500;
-    private const int AckMaxRetries = 3;
 
     private TcpListener? _listener;
     private readonly ConcurrentDictionary<int, TcpClient> _clients = new();
@@ -32,19 +32,22 @@ public class ServerNetworkManager
 
     // --- Lifecycle ---
 
-    public ServerNetworkManager(int maxClients)
+    public ServerNetworkManager(int maxClients, int port, int ackTimeoutMs, int ackMaxRetries)
     {
         _maxClients = maxClients;
+        _port = port;
+        _ackTimeoutMs = ackTimeoutMs;
+        _ackMaxRetries = ackMaxRetries;
     }
 
     public void Start()
     {
         try
         {
-            _listener = new TcpListener(IPAddress.Any, Port);
+            _listener = new TcpListener(IPAddress.Any, _port);
             _listener.Start();
             _isRunning = true;
-            Console.WriteLine($"[Network] Server in ascolto sulla porta {Port}...");
+            Console.WriteLine($"[Network] Server in ascolto sulla porta {_port}...");
             Task.Run(AcceptClientsAsync);
         }
         catch (Exception ex)
@@ -77,11 +80,11 @@ public class ServerNetworkManager
         foreach (var kvp in _pendingAcks)
         {
             var pending = kvp.Value;
-            if (now - pending.SentAtMs > AckTimeoutMs)
+            if (now - pending.SentAtMs > _ackTimeoutMs)
             {
-                if (pending.Retries >= AckMaxRetries)
+                if (pending.Retries >= _ackMaxRetries)
                 {
-                    Console.WriteLine($"[Network] ACK timeout per seq {kvp.Key} verso client {pending.ClientId} dopo {AckMaxRetries} tentativi.");
+                    Console.WriteLine($"[Network] ACK timeout per seq {kvp.Key} verso client {pending.ClientId} dopo {_ackMaxRetries} tentativi.");
                     _pendingAcks.TryRemove(kvp.Key, out _);
                     // Optionally disconnect the client
                 }
@@ -89,7 +92,7 @@ public class ServerNetworkManager
                 {
                     pending.Retries++;
                     pending.SentAtMs = now;
-                    Console.WriteLine($"[Network] Retry {pending.Retries}/{AckMaxRetries} per seq {kvp.Key} verso client {pending.ClientId}");
+                    Console.WriteLine($"[Network] Retry {pending.Retries}/{_ackMaxRetries} per seq {kvp.Key} verso client {pending.ClientId}");
                     SendRaw(pending.ClientId, pending.Message);
                 }
             }

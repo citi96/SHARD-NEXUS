@@ -10,10 +10,10 @@ public class GameServer
     private LobbyManager _lobbyManager;
     private bool _isRunning;
 
-    public GameServer(int maxPlayers)
+    public GameServer(int maxPlayers, int port, int ackTimeoutMs, int ackMaxRetries)
     {
         _matchManager = new MatchManager();
-        _networkManager = new ServerNetworkManager(maxPlayers);
+        _networkManager = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
         _lobbyManager = new LobbyManager(_networkManager, maxPlayers);
     }
 

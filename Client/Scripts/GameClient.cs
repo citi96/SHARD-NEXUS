@@ -9,7 +9,11 @@ namespace Client.Scripts;
 
 public partial class GameClient : Node
 {
+    [Export] public string ServerIp = "127.0.0.1";
+    [Export] public int ServerPort = 7777;
     [Export] public int MaxPlayers = 2;
+    [Export] public float PingInterval = 2.0f;
+
     private TcpClient _tcpClient;
     private NetworkStream _stream;
     private bool _isConnected;
@@ -17,6 +21,11 @@ public partial class GameClient : Node
     private Label _statusLabel;
     private LineEdit _nameInput;
     private Button _joinButton;
+
+    // Ping/Pong
+    private float _pingTimer = 0f;
+    private long _lastPingTime;
+    private int _currentLatencyMs = -1;
 
     public override void _Ready()
     {
@@ -26,6 +35,25 @@ public partial class GameClient : Node
 
         _joinButton.Pressed += OnJoinButtonPressed;
         _statusLabel.Text = "Inserisci il nome e connettiti.";
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!_isConnected) return;
+
+        _pingTimer += (float)delta;
+        if (_pingTimer >= PingInterval)
+        {
+            _pingTimer = 0f;
+            SendPing();
+        }
+    }
+
+    private void SendPing()
+    {
+        _lastPingTime = DateTime.UtcNow.Ticks;
+        var pingMsg = NetworkMessage.Create(MessageType.Ping, new PingMessage { Timestamp = _lastPingTime });
+        SendMessage(pingMsg);
     }
 
     private void OnJoinButtonPressed()
@@ -50,7 +78,7 @@ public partial class GameClient : Node
         try
         {
             _tcpClient = new TcpClient();
-            _tcpClient.Connect("127.0.0.1", 7777);
+            _tcpClient.Connect(ServerIp, ServerPort);
             _stream = _tcpClient.GetStream();
             _isConnected = true;
 
@@ -138,26 +166,54 @@ public partial class GameClient : Node
         var message = NetworkMessage.FromJson(jsonMessage);
         if (message == null) return;
 
+        string pingSuffix = _currentLatencyMs >= 0 ? $" ({_currentLatencyMs}ms)" : "";
+
         switch (message.Type)
         {
+            case MessageType.Pong:
+                var pongResp = message.DeserializePayload<PongMessage>();
+                if (pongResp != null)
+                {
+                    long now = DateTime.UtcNow.Ticks;
+                    _currentLatencyMs = (int)((now - pongResp.OriginalTimestamp) / TimeSpan.TicksPerMillisecond);
+                    // Update status label to show current ping if we are in a waiting state
+                    if (_statusLabel.Text.Contains("In attesa") || _statusLabel.Text.Contains("giocatori"))
+                    {
+                         UpdateStatusWithPing();
+                    }
+                }
+                break;
+
             case MessageType.JoinLobbyResponse:
                 var joinResp = message.DeserializePayload<JoinLobbyMessage>();
-                _statusLabel.Text = $"In attesa di giocatori... ({joinResp?.PlayerName})";
+                _statusLabel.Text = $"In attesa di giocatori... ({joinResp?.PlayerName}){pingSuffix}";
                 _nameInput.Hide();
                 _joinButton.Hide();
                 break;
 
             case MessageType.StartRound:
                 var startMsg = message.DeserializePayload<StartRoundMessage>();
-                _statusLabel.Text = $"MATCH INIZIATO! Round {startMsg?.RoundNumber}";
+                _statusLabel.Text = $"MATCH INIZIATO! Round {startMsg?.RoundNumber}{pingSuffix}";
                 GD.Print("Match Avviato dal Server!");
                 break;
         }
     }
 
+    private void UpdateStatusWithPing()
+    {
+        string currentText = _statusLabel.Text;
+        int lastParen = currentText.LastIndexOf(" (");
+        if (lastParen != -1 && currentText.EndsWith("ms)"))
+        {
+            currentText = currentText.Substring(0, lastParen);
+        }
+        _statusLabel.Text = $"{currentText} ({_currentLatencyMs}ms)";
+    }
+
     private void Disconnect()
     {
         _isConnected = false;
+        _currentLatencyMs = -1;
         _stream?.Close();
         _tcpClient?.Close();
         _statusLabel.Text = "Disconnesso dal server.";
