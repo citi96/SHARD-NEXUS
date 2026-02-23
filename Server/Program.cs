@@ -1,17 +1,21 @@
-﻿using System;
+﻿namespace Server;
 
-namespace Server
+class Program
 {
-    class Program
+    static async Task Main(string[] args)
     {
-        static void Main(string[] args)
+        Console.WriteLine("Avvio del server SHARD NEXUS...");
+        GameServer server = new GameServer();
+
+        // Graceful shutdown via Ctrl+C
+        Console.CancelKeyPress += (_, e) =>
         {
-            Console.WriteLine("Avvio del server SHARD NEXUS...");
-            GameServer server = new GameServer();
-            server.Start();
-            
-            // Mantieni attivo il server
-            Console.ReadLine();
-        }
+            e.Cancel = true;
+            Console.WriteLine("\n[Server] Shutdown richiesto (Ctrl+C)...");
+            server.Stop();
+        };
+
+        await server.RunAsync();
+        Console.WriteLine("[Server] Server terminato.");
     }
 }
