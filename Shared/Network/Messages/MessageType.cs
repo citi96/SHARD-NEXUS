@@ -34,6 +34,7 @@ public enum MessageType : byte
     PlayerEliminated = 60,
     GameEnded = 61,
     OtherPlayerInfo = 62,
+    FeaturedMatch = 63,    // Server → All: broadcast the featured match for observer mode
 
     // --- Errors ---
     Error = 255

@@ -5,19 +5,24 @@ using Shared.Models.Structs;
 using Shared.Models.Enums;
 using Shared.Network.Messages;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Server;
 
 public class GameServer
 {
-    private MatchManager _matchManager;
-    private ServerNetworkManager _networkManager;
-    private LobbyManager _lobbyManager;
-    private EchoPoolManager _echoPoolManager;
-    private PlayerManager _playerManager;
-    private ShopManager _shopManager;
-    private CombatManager _combatManager;
-    private readonly List<EchoDefinition> _echoCatalog;
+    private readonly MatchManager          _matchManager;
+    private readonly ServerNetworkManager  _networkManager;
+    private readonly LobbyManager          _lobbyManager;
+    private readonly EchoPoolManager       _echoPoolManager;
+    private readonly PlayerManager         _playerManager;
+    private readonly ShopManager           _shopManager;
+    private readonly CombatManager         _combatManager;
+    private readonly MatchmakingManager    _matchmakingManager;
+    private readonly List<EchoDefinition>  _echoCatalog;
+    private readonly Random                _rng;
+
+    private int  _currentRound;
     private bool _isRunning;
 
     public GameServer(
@@ -30,128 +35,191 @@ public class GameServer
         PlayerSettings playerSettings,
         CombatSettings combatSettings)
     {
-        _matchManager = new MatchManager();
-        _networkManager = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
-        _lobbyManager = new LobbyManager(_networkManager, maxPlayers);
-
-        _playerManager = new PlayerManager(playerSettings);
-
-        // Mock Catalog for Echo Pool initialization
-        _echoCatalog = new List<EchoDefinition>
-        {
-            new EchoDefinition(1, "Pyroth", Rarity.Common,    EchoClass.Vanguard,  Resonance.Fire,      500, 100,  50, 20, new int[]{}),
-            new EchoDefinition(2, "Aquos",  Rarity.Uncommon,  EchoClass.Caster,    Resonance.Frost,     300, 200,  70, 15, new int[]{}),
-            new EchoDefinition(3, "Terron", Rarity.Rare,      EchoClass.Vanguard,  Resonance.Earth,     800,  50,  30, 60, new int[]{}),
-            new EchoDefinition(4, "Zephyr", Rarity.Epic,      EchoClass.Assassin,  Resonance.Lightning, 400, 150,  90, 10, new int[]{}),
-            new EchoDefinition(5, "Lumin",  Rarity.Legendary, EchoClass.Support,   Resonance.Light,     600, 300,  40, 40, new int[]{})
-        };
+        _matchManager       = new MatchManager();
+        _networkManager     = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
+        _lobbyManager       = new LobbyManager(_networkManager, maxPlayers);
+        _playerManager      = new PlayerManager(playerSettings);
+        _matchmakingManager = new MatchmakingManager();
+        _rng                = new Random(Environment.TickCount);
+        _echoCatalog        = BuildMockCatalog();
 
         _echoPoolManager = new EchoPoolManager(echoPoolSettings, _echoCatalog);
-        _shopManager = new ShopManager(shopSettings, _echoPoolManager, _playerManager, _echoCatalog);
-        _combatManager = new CombatManager(_playerManager, _networkManager, _echoCatalog, combatSettings);
+        _shopManager     = new ShopManager(shopSettings, _echoPoolManager, _playerManager, _echoCatalog);
+        _combatManager   = new CombatManager(_playerManager, _networkManager, _echoCatalog, combatSettings);
 
-        // Wiring up events
-        _shopManager.OnShopUpdated += (playerId, msg) => _networkManager.SendMessage(playerId, msg);
+        WireEvents();
+    }
 
-        _playerManager.OnPlayerStateChanged += (playerId, state) =>
-        {
-            // Send full state to the owner
-            var updateMsg = NetworkMessage.Create(Shared.Network.Messages.MessageType.PlayerStateUpdate, new Shared.Network.Messages.PlayerStateUpdateMessage { State = state });
-            _networkManager.SendMessage(playerId, updateMsg);
+    private void WireEvents()
+    {
+        _shopManager.OnShopUpdated              += (id, msg) => _networkManager.SendMessage(id, msg);
+        _playerManager.OnPlayerStateChanged     += OnPlayerStateChanged;
+        _lobbyManager.OnMatchStarted            += OnMatchStarted;
+        _combatManager.OnAllCombatsComplete     += OnAllCombatsComplete;
+        _networkManager.OnMessageReceived       += HandleMessage;
+        _networkManager.OnClientConnected       += HandleClientConnected;
+        _networkManager.OnClientDisconnected    += _playerManager.RemovePlayer;
+    }
 
-            // Send partial state to everyone else
-            var otherInfo = NetworkMessage.Create(MessageType.OtherPlayerInfo, new OtherPlayerInfoMessage
+    private void OnPlayerStateChanged(int playerId, PlayerState state)
+    {
+        var full = NetworkMessage.Create(MessageType.PlayerStateUpdate,
+            new PlayerStateUpdateMessage { State = state });
+        _networkManager.SendMessage(playerId, full);
+
+        var partial = NetworkMessage.Create(MessageType.OtherPlayerInfo,
+            new OtherPlayerInfoMessage
             {
-                PlayerId = playerId,
+                PlayerId    = playerId,
                 NexusHealth = state.NexusHealth,
-                Level = state.Level,
-                WinStreak = state.WinStreak,
-                LossStreak = state.LossStreak
+                Level       = state.Level,
+                WinStreak   = state.WinStreak,
+                LossStreak  = state.LossStreak,
             });
+        _networkManager.BroadcastMessage(partial);
+    }
 
-            // Broadcast to all connected clients. Clients should ignore updates where PlayerId matches their own.
-            _networkManager.BroadcastMessage(otherInfo);
-        };
+    private void OnMatchStarted(List<int> playerIds)
+    {
+        _currentRound = 1;
+        StartNextCombatRound(playerIds);
+    }
 
-        // When lobby countdown completes, start combat for the paired players
-        _lobbyManager.OnMatchStarted += playerIds =>
+    private void OnAllCombatsComplete(List<CombatResult> results)
+    {
+        UpdateMatchmakingHistory(results);
+
+        var aliveIds = GetAlivePlayerIds();
+
+        if (aliveIds.Count >= 2)
         {
-            if (playerIds.Count >= 2)
-            {
-                int seed = Environment.TickCount;
-                _combatManager.StartCombat(playerIds[0], playerIds[1], round: 1, seed: seed);
-            }
-        };
+            _currentRound++;
+            StartNextCombatRound(aliveIds);
+        }
+        else
+        {
+            int winnerId = aliveIds.Count == 1 ? aliveIds[0] : -1;
+            BroadcastGameEnded(winnerId);
+        }
+    }
 
-        // Listen to client messages
-        _networkManager.OnMessageReceived += HandleMessage;
-        _networkManager.OnClientConnected += HandleClientConnected;
-        _networkManager.OnClientDisconnected += _playerManager.RemovePlayer;
+    private void UpdateMatchmakingHistory(List<CombatResult> results)
+    {
+        foreach (var result in results)
+        {
+            if (result.WinnerPlayerId == MatchmakingManager.GhostPlayerId ||
+                result.LoserPlayerId  == MatchmakingManager.GhostPlayerId)
+                continue;
+
+            var winnerState = _playerManager.GetPlayerState(result.WinnerPlayerId);
+            if (winnerState.HasValue)
+                _matchmakingManager.RecordRoundResult(
+                    result.WinnerPlayerId,
+                    result.LoserPlayerId,
+                    winnerState.Value);
+        }
+    }
+
+    private List<int> GetAlivePlayerIds() =>
+        _playerManager.GetAllPlayerIds()
+            .Where(id => (_playerManager.GetPlayerState(id)?.NexusHealth ?? 0) > 0)
+            .ToList();
+
+    private void StartNextCombatRound(List<int> playerIds)
+    {
+        var states = playerIds
+            .Select(id => _playerManager.GetPlayerState(id))
+            .Where(s => s.HasValue)
+            .Select(s => s!.Value)
+            .ToList();
+
+        if (states.Count == 0) return;
+
+        var mmResult = _matchmakingManager.ComputePairings(states, _currentRound, _rng);
+
+        if (mmResult.Featured != null)
+            BroadcastFeaturedMatch(mmResult.Featured);
+
+        int seed = Environment.TickCount ^ _currentRound;
+        _combatManager.StartCombatRound(mmResult.Pairs, _currentRound, seed);
+    }
+
+    private void BroadcastFeaturedMatch(FeaturedMatchInfo featured)
+    {
+        var msg = NetworkMessage.Create(MessageType.FeaturedMatch,
+            new FeaturedMatchMessage
+            {
+                Player1Id = featured.Player1Id,
+                Player2Id = featured.Player2Id,
+                Reason    = featured.Reason,
+            });
+        _networkManager.BroadcastMessage(msg);
+    }
+
+    private void BroadcastGameEnded(int winnerId)
+    {
+        var msg = NetworkMessage.Create(MessageType.GameEnded,
+            new GameEndedMessage { WinnerId = winnerId, Placements = Array.Empty<int>() });
+        _networkManager.BroadcastMessage(msg);
     }
 
     private void HandleClientConnected(int clientId)
     {
-        // For testing purposes, initialize player state immediately upon connection.
-        // In reality, this would happen when a match starts.
         _playerManager.InitializePlayer(clientId);
-
-        // Give them an initial shop just so we have something on screen!
         _shopManager.GenerateShop(clientId);
     }
 
-    private void HandleMessage(int clientId, Shared.Network.Messages.NetworkMessage message)
+    private void HandleMessage(int clientId, NetworkMessage message)
     {
         switch (message.Type)
         {
-            case Shared.Network.Messages.MessageType.RefreshShop:
+            case MessageType.RefreshShop:
                 _shopManager.HandleRefresh(clientId);
                 break;
-            case Shared.Network.Messages.MessageType.BuyEcho:
-                var buyMsg = message.DeserializePayload<Shared.Network.Messages.BuyEchoMessage>();
+
+            case MessageType.BuyEcho:
+                var buyMsg = message.DeserializePayload<BuyEchoMessage>();
                 if (buyMsg != null)
-                {
                     _shopManager.HandleBuy(clientId, buyMsg.ShopSlot);
-                }
                 break;
         }
     }
 
+    private static List<EchoDefinition> BuildMockCatalog() => new()
+    {
+        new(1, "Pyroth", Rarity.Common,    EchoClass.Vanguard,  Resonance.Fire,      500, 100, 50, 20, new int[]{}),
+        new(2, "Aquos",  Rarity.Uncommon,  EchoClass.Caster,    Resonance.Frost,     300, 200, 70, 15, new int[]{}),
+        new(3, "Terron", Rarity.Rare,      EchoClass.Vanguard,  Resonance.Earth,     800,  50, 30, 60, new int[]{}),
+        new(4, "Zephyr", Rarity.Epic,      EchoClass.Assassin,  Resonance.Lightning, 400, 150, 90, 10, new int[]{}),
+        new(5, "Lumin",  Rarity.Legendary, EchoClass.Support,   Resonance.Light,     600, 300, 40, 40, new int[]{}),
+    };
+
     public void Start()
     {
-        Console.WriteLine("Server avviato. Inizializzazione moduli in corso...");
         _networkManager.Start();
         _isRunning = true;
     }
 
-    /// <summary>
-    /// Main server loop. Call this to run the server tick (~60Hz).
-    /// Blocks until Stop() is called.
-    /// </summary>
     public async Task RunAsync()
     {
         Start();
-
         long lastTick = Environment.TickCount64;
 
         while (_isRunning)
         {
-            long currentTick = Environment.TickCount64;
-            float delta = (currentTick - lastTick) / 1000f;
-            lastTick = currentTick;
+            long now   = Environment.TickCount64;
+            float delta = (now - lastTick) / 1000f;
+            lastTick   = now;
 
             _networkManager.Update();
             _lobbyManager.Update(delta);
             _combatManager.Update(delta);
 
-            await Task.Delay(16); // ~60 Hz tick
+            await Task.Delay(16);
         }
 
         _networkManager.Stop();
     }
 
-    public void Stop()
-    {
-        Console.WriteLine("Arresto del server...");
-        _isRunning = false;
-    }
+    public void Stop() => _isRunning = false;
 }

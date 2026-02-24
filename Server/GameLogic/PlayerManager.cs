@@ -52,6 +52,9 @@ public class PlayerManager
         _players.TryRemove(playerId, out _);
     }
 
+    /// <summary>Returns a snapshot of all currently registered player IDs.</summary>
+    public IReadOnlyList<int> GetAllPlayerIds() => _players.Keys.ToList();
+
     public PlayerState? GetPlayerState(int playerId)
     {
         if (_players.TryGetValue(playerId, out var state))
