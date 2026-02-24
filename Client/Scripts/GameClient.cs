@@ -33,6 +33,7 @@ public partial class GameClient : Node
 
     // State
     private bool _isReady = false;
+    public ClientStateManager StateManager { get; } = new();
 
     // Ping/Pong
     private float _pingTimer = 0f;
@@ -212,6 +213,8 @@ public partial class GameClient : Node
     {
         var message = NetworkMessage.FromJson(jsonMessage);
         if (message == null) return;
+
+        StateManager.HandleMessage(message);
 
         string pingSuffix = _currentLatencyMs >= 0 ? $" ({_currentLatencyMs}ms)" : "";
 
