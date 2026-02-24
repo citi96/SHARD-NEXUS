@@ -88,6 +88,7 @@ public class GameServer
     private void OnAllCombatsComplete(List<CombatResult> results)
     {
         UpdateMatchmakingHistory(results);
+        GrantEconomyToAllPlayers();
 
         var aliveIds = GetAlivePlayerIds();
 
@@ -100,6 +101,15 @@ public class GameServer
         {
             int winnerId = aliveIds.Count == 1 ? aliveIds[0] : -1;
             BroadcastGameEnded(winnerId);
+        }
+    }
+
+    private void GrantEconomyToAllPlayers()
+    {
+        foreach (int id in _playerManager.GetAllPlayerIds())
+        {
+            _playerManager.GrantEndOfRoundGold(id);
+            _playerManager.GrantAutoXp(id);
         }
     }
 
@@ -181,6 +191,16 @@ public class GameServer
                 var buyMsg = message.DeserializePayload<BuyEchoMessage>();
                 if (buyMsg != null)
                     _shopManager.HandleBuy(clientId, buyMsg.ShopSlot);
+                break;
+
+            case MessageType.BuyXP:
+                _playerManager.HandleBuyXP(clientId);
+                break;
+
+            case MessageType.SellEcho:
+                var sellMsg = message.DeserializePayload<SellEchoMessage>();
+                if (sellMsg != null)
+                    _shopManager.HandleSell(clientId, sellMsg.EchoInstanceId);
                 break;
         }
     }

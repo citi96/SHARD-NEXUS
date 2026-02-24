@@ -271,16 +271,30 @@ public class ShopManager
         return -1; // All echoes of this rarity are exhausted
     }
 
+    public void HandleSell(int playerId, int echoInstanceId)
+    {
+        int definitionId = echoInstanceId / 1000;
+        if (!_catalog.TryGetValue(definitionId, out var def)) return;
+
+        if (!_playerManager.TryRemoveFromBenchOrBoard(playerId, echoInstanceId)) return;
+
+        int refund = GetCostForRarity(def.Rarity);
+        _playerManager.AddGold(playerId, refund);
+        _poolManager.ReturnToPool(definitionId);
+
+        Console.WriteLine($"[Shop] Player {playerId} sold Echo {def.Name} for {refund} gold.");
+    }
+
     private int GetCostForRarity(Rarity rarity)
     {
         return rarity switch
         {
-            Rarity.Common => 1,
-            Rarity.Uncommon => 2,
-            Rarity.Rare => 3,
-            Rarity.Epic => 4,
+            Rarity.Common    => 1,
+            Rarity.Uncommon  => 2,
+            Rarity.Rare      => 3,
+            Rarity.Epic      => 4,
             Rarity.Legendary => 5,
-            _ => 1
+            _                => 1
         };
     }
 }

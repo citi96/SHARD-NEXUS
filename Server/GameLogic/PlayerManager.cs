@@ -223,6 +223,66 @@ public class PlayerManager
         }
     }
 
+    public bool TryRemoveFromBenchOrBoard(int playerId, int echoInstanceId)
+    {
+        while (true)
+        {
+            if (!_players.TryGetValue(playerId, out var state)) return false;
+
+            int benchSlot = Array.IndexOf(state.BenchEchoInstanceIds, echoInstanceId);
+            int boardSlot = Array.IndexOf(state.BoardEchoInstanceIds, echoInstanceId);
+
+            if (benchSlot == -1 && boardSlot == -1) return false;
+
+            int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
+            int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
+
+            if (benchSlot != -1) newBench[benchSlot] = -1;
+            if (boardSlot != -1) newBoard[boardSlot] = -1;
+
+            var newState = state with { BenchEchoInstanceIds = newBench, BoardEchoInstanceIds = newBoard };
+            if (_players.TryUpdate(playerId, newState, state))
+            {
+                OnPlayerStateChanged?.Invoke(playerId, newState);
+                return true;
+            }
+        }
+    }
+
+    public void GrantEndOfRoundGold(int playerId)
+    {
+        while (true)
+        {
+            if (!_players.TryGetValue(playerId, out var state)) return;
+
+            int interest    = Math.Min(_settings.MaxInterest, state.Gold / 10);
+            int streak      = Math.Max(state.WinStreak, state.LossStreak);
+            int streakBonus = streak >= 6 ? 3 : streak >= 4 ? 2 : streak >= 2 ? 1 : 0;
+            int earned      = _settings.BaseGoldPerRound + interest + streakBonus;
+
+            int newGold  = Math.Min(state.Gold + earned, _settings.MaxGold);
+            var newState = state with { Gold = newGold };
+            if (_players.TryUpdate(playerId, newState, state))
+            {
+                OnPlayerStateChanged?.Invoke(playerId, newState);
+                return;
+            }
+        }
+    }
+
+    public void GrantAutoXp(int playerId)
+    {
+        if (!_players.TryGetValue(playerId, out var state)) return;
+        if (_settings.AutoXpPerRound.TryGetValue(state.Level.ToString(), out int amount) && amount > 0)
+            AddXP(playerId, amount);
+    }
+
+    public void HandleBuyXP(int playerId)
+    {
+        if (!TryDeductGold(playerId, _settings.XpBuyCost)) return;
+        AddXP(playerId, _settings.XpBuyAmount);
+    }
+
     public bool TryMoveToBoard(int playerId, int echoInstanceId, int boardIndex)
     {
         while (true)
