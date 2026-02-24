@@ -12,6 +12,12 @@ namespace Server.GameLogic
         private readonly ConcurrentDictionary<int, LobbyPlayerInfo> _players;
         private readonly ServerNetworkManager _network;
         
+        /// <summary>
+        /// Fired when the lobby countdown completes and the match begins.
+        /// Payload is the list of connected player IDs.
+        /// </summary>
+        public event Action<List<int>>? OnMatchStarted;
+
         public bool IsMatchStarted { get; private set; }
         private float _countdownTimer = -1f;
 
@@ -52,7 +58,7 @@ namespace Server.GameLogic
             var startMsg = NetworkMessage.Create(MessageType.StartRound, new StartRoundMessage { RoundNumber = 1 });
             _network.BroadcastMessage(startMsg);
             
-            // TODO: Notifica il MatchManager
+            OnMatchStarted?.Invoke(_players.Keys.ToList());
         }
 
         private void HandleMessage(int clientId, NetworkMessage message)

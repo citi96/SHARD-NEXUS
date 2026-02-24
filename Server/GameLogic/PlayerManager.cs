@@ -198,6 +198,28 @@ public class PlayerManager
         }
     }
 
+    /// <summary>
+    /// Updates win/loss streak after a combat result.
+    /// A win resets the loss streak; a loss resets the win streak.
+    /// </summary>
+    public void UpdateStreak(int playerId, bool won)
+    {
+        while (true)
+        {
+            if (!_players.TryGetValue(playerId, out var state)) return;
+
+            var newState = won
+                ? state with { WinStreak = state.WinStreak + 1, LossStreak = 0 }
+                : state with { LossStreak = state.LossStreak + 1, WinStreak = 0 };
+
+            if (_players.TryUpdate(playerId, newState, state))
+            {
+                OnPlayerStateChanged?.Invoke(playerId, newState);
+                return;
+            }
+        }
+    }
+
     public bool TryMoveToBoard(int playerId, int echoInstanceId, int boardIndex)
     {
         while (true)
