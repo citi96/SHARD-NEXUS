@@ -2,6 +2,8 @@
 
 [ext_resource type="Script" uid="uid://cetixlr3q48lc" path="res://Scripts/GameClient.cs" id="1_gclient"]
 [ext_resource type="Script" path="res://Scripts/Grid/GridRenderer.cs" id="2_gridrenderer"]
+[ext_resource type="Script" path="res://Scripts/Grid/BenchRenderer.cs" id="3_benchrenderer"]
+[ext_resource type="Script" path="res://Scripts/Grid/GameBoardController.cs" id="4_boardcontroller"]
 
 [node name="Main" type="Node" unique_id=296357644 node_paths=PackedStringArray("LoginPanel", "NameInput", "JoinButton", "StatusLabel", "LobbyPanel", "PlayersContainer", "ReadyButton")]
 script = ExtResource("1_gclient")
@@ -115,6 +117,16 @@ grow_horizontal = 2
 grow_vertical = 0
 text = "Pronto"
 
-[node name="GridRenderer" type="Control" parent="." unique_id=2938471056]
+[node name="BattleBoard" type="Control" parent="." unique_id=1000000001]
+script = ExtResource("4_boardcontroller")
+position = Vector2(50, 60)
+visible = false
+
+[node name="GridRenderer" type="Control" parent="BattleBoard" unique_id=1000000002]
 script = ExtResource("2_gridrenderer")
-position = Vector2(50, 300)
+
+[node name="BenchArea" type="Control" parent="BattleBoard" unique_id=1000000003]
+position = Vector2(0, 276)
+
+[node name="BenchRenderer" type="Control" parent="BattleBoard/BenchArea" unique_id=1000000004]
+script = ExtResource("3_benchrenderer")

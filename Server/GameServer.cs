@@ -1,6 +1,7 @@
 using Server.Network;
 using Server.GameLogic;
 using Server.Configuration;
+using Shared.Data;
 using Shared.Models.Structs;
 using Shared.Models.Enums;
 using Shared.Network.Messages;
@@ -11,18 +12,18 @@ namespace Server;
 
 public class GameServer
 {
-    private readonly MatchManager          _matchManager;
-    private readonly ServerNetworkManager  _networkManager;
-    private readonly LobbyManager          _lobbyManager;
-    private readonly EchoPoolManager       _echoPoolManager;
-    private readonly PlayerManager         _playerManager;
-    private readonly ShopManager           _shopManager;
-    private readonly CombatManager         _combatManager;
-    private readonly MatchmakingManager    _matchmakingManager;
-    private readonly List<EchoDefinition>  _echoCatalog;
-    private readonly Random                _rng;
+    private readonly MatchManager _matchManager;
+    private readonly ServerNetworkManager _networkManager;
+    private readonly LobbyManager _lobbyManager;
+    private readonly EchoPoolManager _echoPoolManager;
+    private readonly PlayerManager _playerManager;
+    private readonly ShopManager _shopManager;
+    private readonly CombatManager _combatManager;
+    private readonly MatchmakingManager _matchmakingManager;
+    private readonly List<EchoDefinition> _echoCatalog;
+    private readonly Random _rng;
 
-    private int  _currentRound;
+    private int _currentRound;
     private bool _isRunning;
 
     public GameServer(
@@ -35,30 +36,30 @@ public class GameServer
         PlayerSettings playerSettings,
         CombatSettings combatSettings)
     {
-        _matchManager       = new MatchManager();
-        _networkManager     = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
-        _lobbyManager       = new LobbyManager(_networkManager, maxPlayers);
-        _playerManager      = new PlayerManager(playerSettings);
+        _matchManager = new MatchManager();
+        _networkManager = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
+        _lobbyManager = new LobbyManager(_networkManager, maxPlayers);
+        _playerManager = new PlayerManager(playerSettings);
         _matchmakingManager = new MatchmakingManager();
-        _rng                = new Random(Environment.TickCount);
-        _echoCatalog        = BuildMockCatalog();
+        _rng = new Random(Environment.TickCount);
+        _echoCatalog = new List<EchoDefinition>(EchoCatalog.All);
 
         _echoPoolManager = new EchoPoolManager(echoPoolSettings, _echoCatalog);
-        _shopManager     = new ShopManager(shopSettings, _echoPoolManager, _playerManager, _echoCatalog);
-        _combatManager   = new CombatManager(_playerManager, _networkManager, _echoCatalog, combatSettings);
+        _shopManager = new ShopManager(shopSettings, _echoPoolManager, _playerManager, _echoCatalog);
+        _combatManager = new CombatManager(_playerManager, _networkManager, _echoCatalog, combatSettings);
 
         WireEvents();
     }
 
     private void WireEvents()
     {
-        _shopManager.OnShopUpdated              += (id, msg) => _networkManager.SendMessage(id, msg);
-        _playerManager.OnPlayerStateChanged     += OnPlayerStateChanged;
-        _lobbyManager.OnMatchStarted            += OnMatchStarted;
-        _combatManager.OnAllCombatsComplete     += OnAllCombatsComplete;
-        _networkManager.OnMessageReceived       += HandleMessage;
-        _networkManager.OnClientConnected       += HandleClientConnected;
-        _networkManager.OnClientDisconnected    += _playerManager.RemovePlayer;
+        _shopManager.OnShopUpdated += (id, msg) => _networkManager.SendMessage(id, msg);
+        _playerManager.OnPlayerStateChanged += OnPlayerStateChanged;
+        _lobbyManager.OnMatchStarted += OnMatchStarted;
+        _combatManager.OnAllCombatsComplete += OnAllCombatsComplete;
+        _networkManager.OnMessageReceived += HandleMessage;
+        _networkManager.OnClientConnected += HandleClientConnected;
+        _networkManager.OnClientDisconnected += _playerManager.RemovePlayer;
     }
 
     private void OnPlayerStateChanged(int playerId, PlayerState state)
@@ -70,11 +71,11 @@ public class GameServer
         var partial = NetworkMessage.Create(MessageType.OtherPlayerInfo,
             new OtherPlayerInfoMessage
             {
-                PlayerId    = playerId,
+                PlayerId = playerId,
                 NexusHealth = state.NexusHealth,
-                Level       = state.Level,
-                WinStreak   = state.WinStreak,
-                LossStreak  = state.LossStreak,
+                Level = state.Level,
+                WinStreak = state.WinStreak,
+                LossStreak = state.LossStreak,
             });
         _networkManager.BroadcastMessage(partial);
     }
@@ -118,7 +119,7 @@ public class GameServer
         foreach (var result in results)
         {
             if (result.WinnerPlayerId == MatchmakingManager.GhostPlayerId ||
-                result.LoserPlayerId  == MatchmakingManager.GhostPlayerId)
+                result.LoserPlayerId == MatchmakingManager.GhostPlayerId)
                 continue;
 
             var winnerState = _playerManager.GetPlayerState(result.WinnerPlayerId);
@@ -161,7 +162,7 @@ public class GameServer
             {
                 Player1Id = featured.Player1Id,
                 Player2Id = featured.Player2Id,
-                Reason    = featured.Reason,
+                Reason = featured.Reason,
             });
         _networkManager.BroadcastMessage(msg);
     }
@@ -202,17 +203,23 @@ public class GameServer
                 if (sellMsg != null)
                     _shopManager.HandleSell(clientId, sellMsg.EchoInstanceId);
                 break;
+
+            case MessageType.PositionEcho:
+                var posMsg = message.DeserializePayload<PositionEchoMessage>();
+                if (posMsg == null) break;
+                if (posMsg.BoardX < 0 || posMsg.BoardX > 3 ||
+                    posMsg.BoardY < 0 || posMsg.BoardY > 3)
+                {
+                    Console.WriteLine($"[Server] PositionEcho rifiutato: coordinate non valide ({posMsg.BoardX},{posMsg.BoardY}) da client {clientId}");
+                    break;
+                }
+                int boardIndex = posMsg.BoardY * 4 + posMsg.BoardX;
+                bool moved = _playerManager.TryMoveToBoard(clientId, posMsg.EchoInstanceId, boardIndex);
+                if (!moved)
+                    Console.WriteLine($"[Server] PositionEcho rifiutato: TryMoveToBoard fallito (instanceId={posMsg.EchoInstanceId}, idx={boardIndex}, client={clientId})");
+                break;
         }
     }
-
-    private static List<EchoDefinition> BuildMockCatalog() => new()
-    {
-        new(1, "Pyroth", Rarity.Common,    EchoClass.Vanguard,  Resonance.Fire,      500, 100, 50, 20, new int[]{}),
-        new(2, "Aquos",  Rarity.Uncommon,  EchoClass.Caster,    Resonance.Frost,     300, 200, 70, 15, new int[]{}),
-        new(3, "Terron", Rarity.Rare,      EchoClass.Vanguard,  Resonance.Earth,     800,  50, 30, 60, new int[]{}),
-        new(4, "Zephyr", Rarity.Epic,      EchoClass.Assassin,  Resonance.Lightning, 400, 150, 90, 10, new int[]{}),
-        new(5, "Lumin",  Rarity.Legendary, EchoClass.Support,   Resonance.Light,     600, 300, 40, 40, new int[]{}),
-    };
 
     public void Start()
     {
@@ -227,9 +234,9 @@ public class GameServer
 
         while (_isRunning)
         {
-            long now   = Environment.TickCount64;
+            long now = Environment.TickCount64;
             float delta = (now - lastTick) / 1000f;
-            lastTick   = now;
+            lastTick = now;
 
             _networkManager.Update();
             _lobbyManager.Update(delta);

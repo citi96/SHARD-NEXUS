@@ -17,7 +17,7 @@ public partial class GameClient : Node
     private TcpClient _tcpClient;
     private NetworkStream _stream;
     private bool _isConnected;
-    
+
     // UI Elements - Login
     [ExportGroup("UI - Login")]
     [Export] public Control LoginPanel;
@@ -46,7 +46,7 @@ public partial class GameClient : Node
         if (ReadyButton != null) ReadyButton.Pressed += OnReadyButtonPressed;
 
         if (StatusLabel != null) StatusLabel.Text = "Inserisci il nome e connettiti.";
-        
+
         if (LoginPanel != null) LoginPanel.Show();
         if (LobbyPanel != null) LobbyPanel.Hide();
 
@@ -81,6 +81,24 @@ public partial class GameClient : Node
         SendMessage(readyMsg);
     }
 
+    /// <summary>
+    /// Sends a PositionEcho message to the server requesting placement of the given
+    /// echo instance at ally board column <paramref name="boardX"/>, row <paramref name="boardY"/>.
+    /// No optimistic update — the authoritative confirmation arrives as a PlayerStateUpdate.
+    /// </summary>
+    public void SendPositionEcho(int instanceId, int boardX, int boardY)
+    {
+        var msg = NetworkMessage.Create(
+            MessageType.PositionEcho,
+            new PositionEchoMessage
+            {
+                EchoInstanceId = instanceId,
+                BoardX = boardX,
+                BoardY = boardY
+            });
+        SendMessage(msg);
+    }
+
     public override void _Process(double delta)
     {
         if (!_isConnected) return;
@@ -111,20 +129,20 @@ public partial class GameClient : Node
 
         if (NameInput != null) NameInput.Editable = false;
         if (JoinButton != null) JoinButton.Disabled = true;
-        
+
         await ConnectToServerAsync(playerName);
     }
 
     private async Task ConnectToServerAsync(string playerName)
     {
         if (StatusLabel != null) StatusLabel.Text = "Connessione al server...";
-        
+
         try
         {
             _tcpClient = new TcpClient();
             // ConnectAsync prevents freezing the main thread
             await _tcpClient.ConnectAsync(ServerIp, ServerPort);
-            
+
             _stream = _tcpClient.GetStream();
             _isConnected = true;
 
@@ -134,7 +152,7 @@ public partial class GameClient : Node
             // Invia il messaggio di JoinLobby
             var joinMsg = NetworkMessage.Create(MessageType.JoinLobby, new JoinLobbyMessage { PlayerName = playerName });
             SendMessage(joinMsg);
-            
+
             GD.Print($"[Network] Connesso al server {ServerIp}:{ServerPort}");
         }
         catch (Exception ex)
@@ -228,7 +246,7 @@ public partial class GameClient : Node
                     _currentLatencyMs = (int)((now - pongResp.OriginalTimestamp) / TimeSpan.TicksPerMillisecond);
                     if (StatusLabel != null && (StatusLabel.Text.Contains("attesa") || StatusLabel.Text.Contains("giocatori") || StatusLabel.Text.Contains("Lobby")))
                     {
-                         UpdateStatusWithPing();
+                        UpdateStatusWithPing();
                     }
                 }
                 break;
@@ -323,16 +341,16 @@ public partial class GameClient : Node
         _isReady = false;
         _stream?.Close();
         _tcpClient?.Close();
-        
+
         if (StatusLabel != null) StatusLabel.Text = "Disconnesso dal server.";
         if (NameInput != null) NameInput.Editable = true;
         if (JoinButton != null) JoinButton.Disabled = false;
         if (ReadyButton != null) ReadyButton.Text = "Pronto";
-        
+
         if (LoginPanel != null) LoginPanel.Show();
         if (LobbyPanel != null) LobbyPanel.Hide();
     }
-    
+
     public override void _ExitTree()
     {
         Disconnect();

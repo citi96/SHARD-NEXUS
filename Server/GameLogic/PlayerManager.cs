@@ -31,7 +31,7 @@ public class PlayerManager
             Gold: _settings.StartingGold,
             Level: 1,
             Xp: 0,
-            BoardEchoInstanceIds: new int[_settings.BoardSlots], // Typically 28 slots grid
+            BoardEchoInstanceIds: new int[_settings.BoardSlots], // 4 cols × 4 rows = 16 slots (index = row * 4 + col)
             BenchEchoInstanceIds: new int[_settings.BenchSlots],
             MutationIds: Array.Empty<int>(),
             WinStreak: 0,
@@ -160,7 +160,7 @@ public class PlayerManager
                 else
                 {
                     // Reached max level configured
-                    currentXp = 0; 
+                    currentXp = 0;
                     break;
                 }
             }
@@ -187,7 +187,7 @@ public class PlayerManager
 
             int emptySlot = Array.IndexOf(state.BenchEchoInstanceIds, -1);
             if (emptySlot == -1)
-                return false; 
+                return false;
 
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
             newBench[emptySlot] = echoInstanceId;
@@ -255,12 +255,12 @@ public class PlayerManager
         {
             if (!_players.TryGetValue(playerId, out var state)) return;
 
-            int interest    = Math.Min(_settings.MaxInterest, state.Gold / 10);
-            int streak      = Math.Max(state.WinStreak, state.LossStreak);
+            int interest = Math.Min(_settings.MaxInterest, state.Gold / 10);
+            int streak = Math.Max(state.WinStreak, state.LossStreak);
             int streakBonus = streak >= 6 ? 3 : streak >= 4 ? 2 : streak >= 2 ? 1 : 0;
-            int earned      = _settings.BaseGoldPerRound + interest + streakBonus;
+            int earned = _settings.BaseGoldPerRound + interest + streakBonus;
 
-            int newGold  = Math.Min(state.Gold + earned, _settings.MaxGold);
+            int newGold = Math.Min(state.Gold + earned, _settings.MaxGold);
             var newState = state with { Gold = newGold };
             if (_players.TryUpdate(playerId, newState, state))
             {
@@ -298,7 +298,7 @@ public class PlayerManager
             // Find unit in bench
             int benchSlot = Array.IndexOf(state.BenchEchoInstanceIds, echoInstanceId);
             if (benchSlot == -1) return false; // Not found on bench
-            
+
             // Check if board spot is empty
             if (state.BoardEchoInstanceIds[boardIndex] != -1) return false;
 
