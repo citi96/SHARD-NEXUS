@@ -256,11 +256,14 @@ public sealed class CombatSimulator
             Tick   = tick,
             Units  = _units.Select(u => new CombatUnitState
             {
-                Id    = u.InstanceId,
-                Hp    = u.Hp,
-                Col   = u.Col,
-                Row   = u.Row,
-                Alive = u.IsAlive,
+                Id     = u.InstanceId,
+                Hp     = u.Hp,
+                MaxHp  = u.MaxHp,
+                Mana   = u.Mana,
+                MaxMana = u.MaxMana,
+                Col    = u.Col,
+                Row    = u.Row,
+                Alive  = u.IsAlive,
             }).ToList(),
             Events = events.ToList(),
         };

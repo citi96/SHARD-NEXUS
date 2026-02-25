@@ -15,11 +15,14 @@ public class CombatSnapshotPayload
 
 public class CombatUnitState
 {
-    public int Id  { get; set; }
-    public int Hp  { get; set; }
-    public int Col { get; set; }
-    public int Row { get; set; }
-    public bool Alive { get; set; }
+    public int Id      { get; set; }
+    public int Hp      { get; set; }
+    public int MaxHp   { get; set; }
+    public int Mana    { get; set; }
+    public int MaxMana { get; set; }
+    public int Col     { get; set; }
+    public int Row     { get; set; }
+    public bool Alive  { get; set; }
 }
 
 public class CombatEventRecord

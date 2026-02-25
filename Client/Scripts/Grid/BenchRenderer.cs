@@ -8,7 +8,7 @@ namespace Client.Scripts.Grid;
 
 /// <summary>
 /// Renders the 9-slot bench as a horizontal strip.
-/// Each slot shows the Echo name and rarity color, or a grey placeholder if empty.
+/// Each slot shows a class-colored body, resonance border, Echo name, stars, and HP/Mana bars.
 /// The selected slot is outlined in white.
 ///
 /// Emits EchoSelected(instanceId, slotIndex) when the player clicks an occupied slot
@@ -31,6 +31,24 @@ public partial class BenchRenderer : Control
     [Export] public Color RareColor = new(0.10f, 0.40f, 0.90f, 0.70f);
     [Export] public Color EpicColor = new(0.60f, 0.10f, 0.90f, 0.70f);
     [Export] public Color LegendaryColor = new(1.00f, 0.70f, 0.00f, 0.70f);
+
+    [ExportGroup("Echo Colors - Class")]
+    [Export] public Color ClassVanguard = new(0.25f, 0.45f, 0.90f, 1.00f);
+    [Export] public Color ClassStriker = new(0.90f, 0.50f, 0.15f, 1.00f);
+    [Export] public Color ClassRanger = new(0.20f, 0.75f, 0.35f, 1.00f);
+    [Export] public Color ClassCaster = new(0.65f, 0.25f, 0.90f, 1.00f);
+    [Export] public Color ClassSupport = new(0.90f, 0.80f, 0.15f, 1.00f);
+    [Export] public Color ClassAssassin = new(0.70f, 0.10f, 0.20f, 1.00f);
+
+    [ExportGroup("Echo Colors - Resonance")]
+    [Export] public Color ResonanceFire = new(1.00f, 0.30f, 0.10f, 1.00f);
+    [Export] public Color ResonanceFrost = new(0.30f, 0.80f, 1.00f, 1.00f);
+    [Export] public Color ResonanceLightning = new(1.00f, 0.90f, 0.00f, 1.00f);
+    [Export] public Color ResonanceEarth = new(0.60f, 0.40f, 0.10f, 1.00f);
+    [Export] public Color ResonanceVoid = new(0.50f, 0.10f, 0.70f, 1.00f);
+    [Export] public Color ResonanceLight = new(1.00f, 0.95f, 0.70f, 1.00f);
+    [Export] public Color ResonanceShadow = new(0.25f, 0.20f, 0.35f, 1.00f);
+    [Export] public Color ResonancePrism = new(0.80f, 0.80f, 0.80f, 1.00f);
 
     /// <summary>
     /// Emitted when the player clicks an occupied bench slot during Preparation.
@@ -97,16 +115,49 @@ public partial class BenchRenderer : Control
                 var def = EchoCatalog.GetByInstanceId(instanceId);
                 DrawRect(rect, RarityColor(def?.Rarity));
 
-                string name = def?.Name ?? $"#{instanceId / 1000}";
-                string stars = "\u2605";
+                // Class body (inner rect with margin)
+                const int margin = 4;
+                const int bodyHeight = 36;
+                var innerRect = new Rect2(
+                    rect.Position + new Vector2(margin, margin),
+                    new Vector2(rect.Size.X - margin * 2, bodyHeight));
+                DrawRect(innerRect, new Color(ClassColor(def?.Class), 0.70f));
 
-                DrawString(font, rect.Position + new Vector2(4, fs + 4),  name,  HorizontalAlignment.Left, rect.Size.X - 4, fs, SlotNameColor);
-                DrawString(font, rect.Position + new Vector2(4, fs * 2 + 6), stars, HorizontalAlignment.Left, rect.Size.X - 4, fs, SlotNameColor);
+                // Resonance border around body
+                DrawRect(innerRect, ResonanceColor(def?.Resonance), false, 1.5f);
+
+                // Name + stars
+                string name = def?.Name ?? $"#{instanceId / 1000}";
+                DrawString(font, rect.Position + new Vector2(4, fs + 4),
+                    name, HorizontalAlignment.Left, rect.Size.X - 4, fs, SlotNameColor);
+                DrawString(font, rect.Position + new Vector2(4, 46),
+                    "\u2605", HorizontalAlignment.Left, rect.Size.X - 4, fs, SlotNameColor);
+
+                // HP bar (always full — bench echoes don't take damage)
+                DrawBars(rect);
             }
 
             if (i == _selectedSlot)
                 DrawRect(rect, SelectedBorder, false, 2f);
         }
+    }
+
+    private void DrawBars(Rect2 slot)
+    {
+        const float hpY = 53f;
+        const float mpY = 58f;
+        const float hpH = 4f;
+        const float mpH = 3f;
+        const float margin = 3f;
+        float barW = slot.Size.X - margin * 2;
+
+        var hpBg = new Rect2(slot.Position.X + margin, slot.Position.Y + hpY, barW, hpH);
+        DrawRect(hpBg, new Color(0f, 0.20f, 0f));
+        DrawRect(new Rect2(hpBg.Position, new Vector2(barW, hpH)), new Color(0.15f, 0.80f, 0.15f));
+
+        var mpBg = new Rect2(slot.Position.X + margin, slot.Position.Y + mpY, barW, mpH);
+        DrawRect(mpBg, new Color(0f, 0f, 0.25f));
+        // Mana bar intentionally empty: echoes start at 0 mana
     }
 
     public override void _GuiInput(InputEvent @event)
@@ -163,5 +214,29 @@ public partial class BenchRenderer : Control
         Rarity.Epic => EpicColor,
         Rarity.Legendary => LegendaryColor,
         _ => EmptySlot
+    };
+
+    private Color ClassColor(EchoClass? cls) => cls switch
+    {
+        EchoClass.Vanguard => ClassVanguard,
+        EchoClass.Striker => ClassStriker,
+        EchoClass.Ranger => ClassRanger,
+        EchoClass.Caster => ClassCaster,
+        EchoClass.Support => ClassSupport,
+        EchoClass.Assassin => ClassAssassin,
+        _ => new Color(0.3f, 0.3f, 0.3f)
+    };
+
+    private Color ResonanceColor(Resonance? res) => res switch
+    {
+        Resonance.Fire => ResonanceFire,
+        Resonance.Frost => ResonanceFrost,
+        Resonance.Lightning => ResonanceLightning,
+        Resonance.Earth => ResonanceEarth,
+        Resonance.Void => ResonanceVoid,
+        Resonance.Light => ResonanceLight,
+        Resonance.Shadow => ResonanceShadow,
+        Resonance.Prism => ResonancePrism,
+        _ => new Color(0.5f, 0.5f, 0.5f)
     };
 }
