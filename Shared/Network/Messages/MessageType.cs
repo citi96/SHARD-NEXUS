@@ -19,6 +19,7 @@ public enum MessageType : byte
     UseIntervention = 15,
     BuyXP = 16,
     RefreshShop = 17,
+    RemoveFromBoard = 18,
 
     // --- Server → Client ---
     JoinLobbyResponse = 50,
@@ -35,6 +36,7 @@ public enum MessageType : byte
     GameEnded = 61,
     OtherPlayerInfo = 62,
     FeaturedMatch = 63,    // Server → All: broadcast the featured match for observer mode
+    ActionRejected = 64,   // Server → Client: action rejected with reason
 
     // --- Errors ---
     Error = 255

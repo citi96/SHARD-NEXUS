@@ -56,6 +56,12 @@ public partial class BenchRenderer : Control
     [Signal]
     public delegate void EchoSelectedEventHandler(int instanceId, int slotIndex);
 
+    /// <summary>
+    /// Emitted when the player right-clicks an occupied bench slot during Preparation.
+    /// </summary>
+    [Signal]
+    public delegate void SellRequestedEventHandler(int instanceId);
+
     private ClientStateManager? _stateManager;
     private PlayerState? _ownState;
     private GamePhase _currentPhase = GamePhase.WaitingForPlayers;
@@ -162,17 +168,20 @@ public partial class BenchRenderer : Control
 
     public override void _GuiInput(InputEvent @event)
     {
-        if (@event is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click) return;
+        if (@event is not InputEventMouseButton { Pressed: true } btn) return;
         if (_currentPhase != GamePhase.Preparation) return;
         if (!_ownState.HasValue) return;
 
-        int slotIndex = (int)(click.Position.X / (SlotSize + SlotGap));
+        int slotIndex = (int)(btn.Position.X / (SlotSize + SlotGap));
         if (slotIndex < 0 || slotIndex >= BenchSlots) return;
 
         var ids = _ownState.Value.BenchEchoInstanceIds;
         if (slotIndex >= ids.Length || ids[slotIndex] == -1) return;
 
-        EmitSignal(SignalName.EchoSelected, ids[slotIndex], slotIndex);
+        if (btn.ButtonIndex == MouseButton.Left)
+            EmitSignal(SignalName.EchoSelected, ids[slotIndex], slotIndex);
+        else if (btn.ButtonIndex == MouseButton.Right)
+            EmitSignal(SignalName.SellRequested, ids[slotIndex]);
     }
 
     private void OnOwnStateChanged(PlayerState state)

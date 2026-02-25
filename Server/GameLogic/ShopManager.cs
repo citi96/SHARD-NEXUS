@@ -55,13 +55,10 @@ public class ShopManager
         _catalog = catalog.ToDictionary(k => k.Id, v => v);
     }
 
-    public void HandleRefresh(int playerId)
+    public bool HandleRefresh(int playerId)
     {
         if (!_playerManager.TryDeductGold(playerId, _settings.RefreshCost))
-        {
-            // Not enough gold to refresh
-            return;
-        }
+            return false;
 
         // Return old shop echoes to pool
         if (_playerShops.TryGetValue(playerId, out int[]? oldShop) && oldShop != null)
@@ -80,6 +77,7 @@ public class ShopManager
         pity.IncrementAll();
 
         GenerateShop(playerId);
+        return true;
     }
 
     public void GenerateShop(int playerId)
@@ -165,47 +163,34 @@ public class ShopManager
 
     public event Action<int, NetworkMessage>? OnShopUpdated;
 
-    public void HandleBuy(int playerId, int slotIndex)
+    public bool HandleBuy(int playerId, int slotIndex)
     {
-        if (slotIndex < 0 || slotIndex >= ShopSize) return;
+        if (slotIndex < 0 || slotIndex >= ShopSize) return false;
 
         if (!_playerShops.TryGetValue(playerId, out int[]? currentShop) || currentShop == null)
-            return;
+            return false;
 
         int echoId = currentShop[slotIndex];
-        if (echoId == -1) return; // slot is empty or already bought
+        if (echoId == -1) return false;
 
         if (!_catalog.TryGetValue(echoId, out var def))
-            return;
+            return false;
 
         int cost = GetCostForRarity(def.Rarity);
 
-        // Validate gold
         if (!_playerManager.HasEnoughGold(playerId, cost))
-            return;
+            return false;
 
-        // Emulate creating a new InstanceId here
-        // In a real game, you need a deterministic InstanceId generator
-        int newInstanceId = echoId * 1000 + _rand.Next(0, 999); 
+        int newInstanceId = echoId * 1000 + _rand.Next(0, 999);
 
-        // Try adding to bench
         if (!_playerManager.TryAddToBench(playerId, newInstanceId))
-        {
-            // Bench is full
-            return;
-        }
+            return false;
 
-        // Deduct gold
         if (!_playerManager.TryDeductGold(playerId, cost))
-        {
-            // Edge case: gold was spent between HasEnoughGold and here
-            return;
-        }
+            return false;
 
-        // Clear slot in shop
         currentShop[slotIndex] = -1;
 
-        // Player successfully bought it
         Console.WriteLine($"[Shop] Player {playerId} bought Echo {def.Name} (Rarity: {def.Rarity}, Cost: {cost})");
 
         var message = NetworkMessage.Create(MessageType.ShopRefreshed, new ShopRefreshedMessage
@@ -213,8 +198,7 @@ public class ShopManager
             EchoDefinitionIds = new List<int>(currentShop)
         });
         OnShopUpdated?.Invoke(playerId, message);
-        
-        // A PlayerStateUpdateMessage should probably also be emitted by the PlayerManager/GameServer
+        return true;
     }
 
     private ShopProbabilities GetProbabilitiesForLevel(int level)

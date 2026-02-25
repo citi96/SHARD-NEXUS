@@ -40,7 +40,9 @@ public partial class GameBoardController : Control
         _benchRenderer.Initialize(sm);
 
         _gridRenderer.CellClicked += OnGridCellClicked;
+        _gridRenderer.RemoveFromBoardRequested += OnRemoveFromBoardRequested;
         _benchRenderer.EchoSelected += OnBenchEchoSelected;
+        _benchRenderer.SellRequested += OnSellRequested;
 
         sm.OnPhaseChanged += OnPhaseChanged;
         // OnRoundStarted fires when the server starts a match — treated as the start
@@ -53,6 +55,16 @@ public partial class GameBoardController : Control
 
     public override void _ExitTree()
     {
+        if (_gridRenderer != null)
+        {
+            _gridRenderer.CellClicked -= OnGridCellClicked;
+            _gridRenderer.RemoveFromBoardRequested -= OnRemoveFromBoardRequested;
+        }
+        if (_benchRenderer != null)
+        {
+            _benchRenderer.EchoSelected -= OnBenchEchoSelected;
+            _benchRenderer.SellRequested -= OnSellRequested;
+        }
         if (_gameClient == null) return;
         var sm = _gameClient.StateManager;
         sm.OnPhaseChanged -= OnPhaseChanged;
@@ -79,6 +91,18 @@ public partial class GameBoardController : Control
 
         _gameClient.SendPositionEcho(_selectedInstanceId, col, row);
         _gridRenderer?.SetDropZoneActive(col, row);
+        ClearSelection();
+    }
+
+    private void OnRemoveFromBoardRequested(int instanceId)
+    {
+        _gameClient?.SendRemoveFromBoard(instanceId);
+        ClearSelection();
+    }
+
+    private void OnSellRequested(int instanceId)
+    {
+        _gameClient?.SendSellEcho(instanceId);
         ClearSelection();
     }
 

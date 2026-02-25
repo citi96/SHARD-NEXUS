@@ -3,6 +3,7 @@ using System;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using Shared.Models.Enums;
 using Shared.Network.Messages;
 
 namespace Client.Scripts;
@@ -98,6 +99,28 @@ public partial class GameClient : Node
             });
         SendMessage(msg);
     }
+
+    public void SendBuyEcho(int shopSlot)
+        => SendMessage(NetworkMessage.Create(MessageType.BuyEcho,
+           new BuyEchoMessage { ShopSlot = shopSlot }));
+
+    public void SendSellEcho(int echoInstanceId)
+        => SendMessage(NetworkMessage.Create(MessageType.SellEcho,
+           new SellEchoMessage { EchoInstanceId = echoInstanceId }));
+
+    public void SendRefreshShop()
+        => SendMessage(NetworkMessage.Create(MessageType.RefreshShop, new RefreshShopMessage()));
+
+    public void SendBuyXP()
+        => SendMessage(NetworkMessage.Create(MessageType.BuyXP, new BuyXPMessage()));
+
+    public void SendRemoveFromBoard(int echoInstanceId)
+        => SendMessage(NetworkMessage.Create(MessageType.RemoveFromBoard,
+           new RemoveFromBoardMessage { EchoInstanceId = echoInstanceId }));
+
+    public void SendUseIntervention(InterventionType type)
+        => SendMessage(NetworkMessage.Create(MessageType.UseIntervention,
+           new UseInterventionMessage { CardId = type.ToString(), TargetId = 0 }));
 
     public override void _Process(double delta)
     {

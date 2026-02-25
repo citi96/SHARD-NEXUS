@@ -44,6 +44,7 @@ public class ClientStateManager
     public event Action<GamePhase, float>?          OnPhaseChanged;
     public event Action<int, int>?                  OnPlayerEliminated;
     public event Action<FeaturedMatchMessage>?      OnFeaturedMatchChanged;
+    public event Action<ActionRejectedMessage>?     OnActionRejected;
 
     // ── Entry Point ───────────────────────────────────────────────────────────
 
@@ -62,6 +63,7 @@ public class ClientStateManager
             case MessageType.PhaseChanged:      HandlePhaseChanged(message);      break;
             case MessageType.PlayerEliminated:  HandlePlayerEliminated(message);  break;
             case MessageType.FeaturedMatch:     HandleFeaturedMatch(message);     break;
+            case MessageType.ActionRejected:    HandleActionRejected(message);    break;
         }
     }
 
@@ -156,5 +158,12 @@ public class ClientStateManager
         if (msg == null) return;
         FeaturedMatch = msg;
         OnFeaturedMatchChanged?.Invoke(msg);
+    }
+
+    private void HandleActionRejected(NetworkMessage message)
+    {
+        var msg = message.DeserializePayload<ActionRejectedMessage>();
+        if (msg == null) return;
+        OnActionRejected?.Invoke(msg);
     }
 }

@@ -283,6 +283,32 @@ public class PlayerManager
         AddXP(playerId, _settings.XpBuyAmount);
     }
 
+    public bool TryMoveToBench(int playerId, int echoInstanceId)
+    {
+        while (true)
+        {
+            if (!_players.TryGetValue(playerId, out var state)) return false;
+
+            int boardSlot = Array.IndexOf(state.BoardEchoInstanceIds, echoInstanceId);
+            if (boardSlot == -1) return false;
+
+            int emptyBench = Array.IndexOf(state.BenchEchoInstanceIds, -1);
+            if (emptyBench == -1) return false;
+
+            int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
+            int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
+            newBoard[boardSlot] = -1;
+            newBench[emptyBench] = echoInstanceId;
+
+            var newState = state with { BoardEchoInstanceIds = newBoard, BenchEchoInstanceIds = newBench };
+            if (_players.TryUpdate(playerId, newState, state))
+            {
+                OnPlayerStateChanged?.Invoke(playerId, newState);
+                return true;
+            }
+        }
+    }
+
     public bool TryMoveToBoard(int playerId, int echoInstanceId, int boardIndex)
     {
         while (true)

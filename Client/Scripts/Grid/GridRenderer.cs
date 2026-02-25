@@ -61,6 +61,13 @@ public partial class GridRenderer : Control
     [Signal]
     public delegate void CellClickedEventHandler(int col, int row);
 
+    /// <summary>
+    /// Emitted when the player right-clicks an occupied ally cell during Preparation.
+    /// Used to request moving the echo back to the bench.
+    /// </summary>
+    [Signal]
+    public delegate void RemoveFromBoardRequestedEventHandler(int instanceId);
+
     private ClientStateManager? _stateManager;
     private PlayerState? _ownState;
     private GamePhase _currentPhase = GamePhase.WaitingForPlayers;
@@ -306,6 +313,10 @@ public partial class GridRenderer : Control
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click:
                 HandleClick(click.Position);
                 break;
+
+            case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } rclick:
+                HandleRightClick(rclick.Position);
+                break;
         }
     }
 
@@ -329,6 +340,22 @@ public partial class GridRenderer : Control
         if (col >= AllyCols) return;
 
         EmitSignal(SignalName.CellClicked, col, row);
+    }
+
+    private void HandleRightClick(Vector2 position)
+    {
+        if (_currentPhase != GamePhase.Preparation) return;
+        if (!_ownState.HasValue) return;
+
+        int col = Mathf.Clamp((int)(position.X / CellSize), 0, TotalCols - 1);
+        int row = Mathf.Clamp((int)(position.Y / CellSize), 0, Rows - 1);
+        if (col >= AllyCols) return;
+
+        int idx = row * AllyCols + col;
+        var ids = _ownState.Value.BoardEchoInstanceIds;
+        if (idx >= ids.Length || ids[idx] == -1) return;
+
+        EmitSignal(SignalName.RemoveFromBoardRequested, ids[idx]);
     }
 
     private void OnMouseExited()

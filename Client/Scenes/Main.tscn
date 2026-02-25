@@ -4,6 +4,8 @@
 [ext_resource type="Script" path="res://Scripts/Grid/GridRenderer.cs" id="2_gridrenderer"]
 [ext_resource type="Script" path="res://Scripts/Grid/BenchRenderer.cs" id="3_benchrenderer"]
 [ext_resource type="Script" path="res://Scripts/Grid/GameBoardController.cs" id="4_boardcontroller"]
+[ext_resource type="Script" path="res://Scripts/Shop/ShopPanel.cs" id="5_shoppanel"]
+[ext_resource type="Script" path="res://Scripts/UI/InterventionPanel.cs" id="6_interventionpanel"]
 
 [node name="Main" type="Node" unique_id=296357644 node_paths=PackedStringArray("LoginPanel", "NameInput", "JoinButton", "StatusLabel", "LobbyPanel", "PlayersContainer", "ReadyButton")]
 script = ExtResource("1_gclient")
@@ -130,3 +132,13 @@ position = Vector2(0, 276)
 
 [node name="BenchRenderer" type="Control" parent="BattleBoard/BenchArea" unique_id=1000000004]
 script = ExtResource("3_benchrenderer")
+
+[node name="ShopPanel" type="Control" parent="." unique_id=2000000001]
+script = ExtResource("5_shoppanel")
+position = Vector2(50, 420)
+visible = false
+
+[node name="InterventionPanel" type="Control" parent="." unique_id=2000000002]
+script = ExtResource("6_interventionpanel")
+position = Vector2(620, 336)
+visible = false

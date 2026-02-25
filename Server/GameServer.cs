@@ -180,18 +180,26 @@ public class GameServer
         _shopManager.GenerateShop(clientId);
     }
 
+    private void SendActionRejected(int clientId, string action, string reason)
+    {
+        var msg = NetworkMessage.Create(MessageType.ActionRejected,
+            new ActionRejectedMessage { Action = action, Reason = reason });
+        _networkManager.SendMessage(clientId, msg);
+    }
+
     private void HandleMessage(int clientId, NetworkMessage message)
     {
         switch (message.Type)
         {
             case MessageType.RefreshShop:
-                _shopManager.HandleRefresh(clientId);
+                if (!_shopManager.HandleRefresh(clientId))
+                    SendActionRejected(clientId, "RefreshShop", "Oro insufficiente");
                 break;
 
             case MessageType.BuyEcho:
                 var buyMsg = message.DeserializePayload<BuyEchoMessage>();
-                if (buyMsg != null)
-                    _shopManager.HandleBuy(clientId, buyMsg.ShopSlot);
+                if (buyMsg != null && !_shopManager.HandleBuy(clientId, buyMsg.ShopSlot))
+                    SendActionRejected(clientId, "BuyEcho", "Oro insufficiente o bench piena");
                 break;
 
             case MessageType.BuyXP:
@@ -210,13 +218,23 @@ public class GameServer
                 if (posMsg.BoardX < 0 || posMsg.BoardX > 3 ||
                     posMsg.BoardY < 0 || posMsg.BoardY > 3)
                 {
-                    Console.WriteLine($"[Server] PositionEcho rifiutato: coordinate non valide ({posMsg.BoardX},{posMsg.BoardY}) da client {clientId}");
+                    SendActionRejected(clientId, "PositionEcho", "Coordinate non valide");
                     break;
                 }
                 int boardIndex = posMsg.BoardY * 4 + posMsg.BoardX;
-                bool moved = _playerManager.TryMoveToBoard(clientId, posMsg.EchoInstanceId, boardIndex);
-                if (!moved)
-                    Console.WriteLine($"[Server] PositionEcho rifiutato: TryMoveToBoard fallito (instanceId={posMsg.EchoInstanceId}, idx={boardIndex}, client={clientId})");
+                if (!_playerManager.TryMoveToBoard(clientId, posMsg.EchoInstanceId, boardIndex))
+                    SendActionRejected(clientId, "PositionEcho", "Unità non in bench, slot occupato o limite livello raggiunto");
+                break;
+
+            case MessageType.RemoveFromBoard:
+                var removeMsg = message.DeserializePayload<RemoveFromBoardMessage>();
+                if (removeMsg == null) break;
+                if (!_playerManager.TryMoveToBench(clientId, removeMsg.EchoInstanceId))
+                    SendActionRejected(clientId, "RemoveFromBoard", "Unità non in board o bench piena");
+                break;
+
+            case MessageType.UseIntervention:
+                SendActionRejected(clientId, "UseIntervention", "Sistema interventi non ancora disponibile");
                 break;
         }
     }
