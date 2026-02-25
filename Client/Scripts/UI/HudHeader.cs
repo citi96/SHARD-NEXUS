@@ -66,6 +66,8 @@ public partial class HudHeader : Control
         }
         _round = _sm.CurrentRound;
         _phase = _sm.CurrentPhase;
+
+        Visible = false;
     }
 
     public override void _ExitTree()
@@ -155,7 +157,8 @@ public partial class HudHeader : Control
 
     private void OnRoundStarted(int round)
     {
-        _round = round;
+        _round   = round;
+        Visible  = true;
         QueueRedraw();
     }
 

@@ -45,6 +45,7 @@ public partial class PlayerList : Control
 
         _sm.OnOwnStateChanged    += state => { _ownState = state; QueueRedraw(); };
         _sm.OnOpponentInfoChanged += (_, _) => QueueRedraw();
+        _sm.OnRoundStarted       += _ => { Visible = true; QueueRedraw(); };
         _sm.OnCombatStarted      += (opponentId, _) => { _combatOpponentId = opponentId; QueueRedraw(); };
         _sm.OnCombatEnded        += (_, _) => { _combatOpponentId = null; QueueRedraw(); };
         _sm.OnPlayerEliminated   += (_, _) => QueueRedraw();
@@ -53,6 +54,8 @@ public partial class PlayerList : Control
         if (_sm.OwnState.HasValue)
             _ownState = _sm.OwnState;
         _combatOpponentId = _sm.CombatOpponentId;
+
+        Visible = false;
     }
 
     public override void _Draw()
