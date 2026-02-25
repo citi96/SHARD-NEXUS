@@ -17,20 +17,20 @@ namespace Client.Scripts.UI;
 /// </summary>
 public partial class HudHeader : Control
 {
-    public const int Height  = 52;
-    public const int HpMax   = 100;
-    public const int BarW    = 80;
-    public const int BarH    = 4;
+    public const int Height = 52;
+    public const int HpMax = 100;
+    public const int BarW = 80;
+    public const int BarH = 4;
 
     [ExportGroup("Colors")]
-    [Export] public Color Bg        = new(0.08f, 0.08f, 0.08f, 0.92f);
+    [Export] public Color Bg = new(0.08f, 0.08f, 0.08f, 0.92f);
     [Export] public Color TextColor = new(1.00f, 1.00f, 1.00f, 1.00f);
     [Export] public Color GoldColor = new(1.00f, 0.85f, 0.20f, 1.00f);
-    [Export] public Color HpHigh    = new(0.15f, 0.80f, 0.15f, 1.00f);
-    [Export] public Color HpMid     = new(0.90f, 0.75f, 0.10f, 1.00f);
-    [Export] public Color HpLow     = new(0.90f, 0.15f, 0.10f, 1.00f);
-    [Export] public Color BarBg     = new(0.15f, 0.15f, 0.15f, 1.00f);
-    [Export] public Color XpBarFg   = new(0.30f, 0.60f, 1.00f, 1.00f);
+    [Export] public Color HpHigh = new(0.15f, 0.80f, 0.15f, 1.00f);
+    [Export] public Color HpMid = new(0.90f, 0.75f, 0.10f, 1.00f);
+    [Export] public Color HpLow = new(0.90f, 0.15f, 0.10f, 1.00f);
+    [Export] public Color BarBg = new(0.15f, 0.15f, 0.15f, 1.00f);
+    [Export] public Color XpBarFg = new(0.30f, 0.60f, 1.00f, 1.00f);
     [Export] public Color TimerWarn = new(1.00f, 0.40f, 0.10f, 1.00f);
 
     private GameClient? _gameClient;
@@ -51,18 +51,18 @@ public partial class HudHeader : Control
         _sm = _gameClient.StateManager;
 
         _sm.OnOwnStateChanged += OnOwnStateChanged;
-        _sm.OnPhaseChanged    += OnPhaseChanged;
-        _sm.OnRoundStarted    += OnRoundStarted;
-        _sm.OnGameEnded       += _ => { _phase = GamePhase.GameOver; _timerLeft = 0; QueueRedraw(); };
+        _sm.OnPhaseChanged += OnPhaseChanged;
+        _sm.OnRoundStarted += OnRoundStarted;
+        _sm.OnGameEnded += _ => { _phase = GamePhase.GameOver; _timerLeft = 0; QueueRedraw(); };
 
         // Seed from current state if match already in progress
         if (_sm.OwnState.HasValue)
         {
             var s = _sm.OwnState.Value;
             _nexusHp = s.NexusHealth;
-            _gold    = s.Gold;
-            _level   = s.Level;
-            _xp      = s.Xp;
+            _gold = s.Gold;
+            _level = s.Level;
+            _xp = s.Xp;
         }
         _round = _sm.CurrentRound;
         _phase = _sm.CurrentPhase;
@@ -74,8 +74,8 @@ public partial class HudHeader : Control
     {
         if (_sm == null) return;
         _sm.OnOwnStateChanged -= OnOwnStateChanged;
-        _sm.OnPhaseChanged    -= OnPhaseChanged;
-        _sm.OnRoundStarted    -= OnRoundStarted;
+        _sm.OnPhaseChanged -= OnPhaseChanged;
+        _sm.OnRoundStarted -= OnRoundStarted;
     }
 
     public override void _Process(double delta)
@@ -89,7 +89,7 @@ public partial class HudHeader : Control
     public override void _Draw()
     {
         var font = ThemeDB.FallbackFont;
-        const int fs   = 12;
+        const int fs = 12;
         const float ty = Height / 2f + fs / 2f;   // text baseline, vertically centered
         const float by = Height / 2f + 6f;         // bar top (below text center)
 
@@ -142,23 +142,23 @@ public partial class HudHeader : Control
     private void OnOwnStateChanged(PlayerState state)
     {
         _nexusHp = state.NexusHealth;
-        _gold    = state.Gold;
-        _level   = state.Level;
-        _xp      = state.Xp;
+        _gold = state.Gold;
+        _level = state.Level;
+        _xp = state.Xp;
         QueueRedraw();
     }
 
     private void OnPhaseChanged(GamePhase phase, float duration)
     {
-        _phase     = phase;
+        _phase = phase;
         _timerLeft = duration;
         QueueRedraw();
     }
 
     private void OnRoundStarted(int round)
     {
-        _round   = round;
-        Visible  = true;
+        _round = round;
+        Visible = true;
         QueueRedraw();
     }
 
@@ -170,12 +170,12 @@ public partial class HudHeader : Control
     private static string PhaseName(GamePhase phase) => phase switch
     {
         GamePhase.WaitingForPlayers => "Attesa",
-        GamePhase.Preparation       => "Preparazione",
-        GamePhase.Combat            => "Combattimento",
-        GamePhase.Reward            => "Ricompensa",
-        GamePhase.MutationChoice    => "Mutazione",
-        GamePhase.GameOver          => "Fine Partita",
-        _                           => phase.ToString()
+        GamePhase.Preparation => "Preparazione",
+        GamePhase.Combat => "Combattimento",
+        GamePhase.Reward => "Ricompensa",
+        GamePhase.MutationChoice => "Mutazione",
+        GamePhase.GameOver => "Fine Partita",
+        _ => phase.ToString()
     };
 
     // Mirrors PlayerSettings.XpToLevel: key = current level, value = XP needed to level up.

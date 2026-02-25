@@ -18,18 +18,18 @@ namespace Client.Scripts.UI;
 /// </summary>
 public partial class PlayerList : Control
 {
-    public const int RowH   = 28;
+    public const int RowH = 28;
     public const int PanelW = 200;
-    public const int HpMax  = 100;
+    public const int HpMax = 100;
 
     [ExportGroup("Colors")]
-    [Export] public Color BgNormal      = new(0.10f, 0.10f, 0.10f, 0.85f);
-    [Export] public Color BgSelf        = new(0.15f, 0.25f, 0.45f, 0.90f);
-    [Export] public Color BgOpponent    = new(0.45f, 0.20f, 0.10f, 0.90f);
-    [Export] public Color BgEliminated  = new(0.08f, 0.08f, 0.08f, 0.60f);
-    [Export] public Color HpBarFg       = new(0.15f, 0.80f, 0.15f, 1.00f);
-    [Export] public Color HpBarBg       = new(0.20f, 0.10f, 0.10f, 1.00f);
-    [Export] public Color TextColor     = new(1.00f, 1.00f, 1.00f, 1.00f);
+    [Export] public Color BgNormal = new(0.10f, 0.10f, 0.10f, 0.85f);
+    [Export] public Color BgSelf = new(0.15f, 0.25f, 0.45f, 0.90f);
+    [Export] public Color BgOpponent = new(0.45f, 0.20f, 0.10f, 0.90f);
+    [Export] public Color BgEliminated = new(0.08f, 0.08f, 0.08f, 0.60f);
+    [Export] public Color HpBarFg = new(0.15f, 0.80f, 0.15f, 1.00f);
+    [Export] public Color HpBarBg = new(0.20f, 0.10f, 0.10f, 1.00f);
+    [Export] public Color TextColor = new(1.00f, 1.00f, 1.00f, 1.00f);
     [Export] public Color EliminatedText = new(0.45f, 0.45f, 0.45f, 1.00f);
 
     private ClientStateManager? _sm;
@@ -43,12 +43,12 @@ public partial class PlayerList : Control
         var gc = GetParent<GameClient>();
         _sm = gc.StateManager;
 
-        _sm.OnOwnStateChanged    += state => { _ownState = state; QueueRedraw(); };
+        _sm.OnOwnStateChanged += state => { _ownState = state; QueueRedraw(); };
         _sm.OnOpponentInfoChanged += (_, _) => QueueRedraw();
-        _sm.OnRoundStarted       += _ => { Visible = true; QueueRedraw(); };
-        _sm.OnCombatStarted      += (opponentId, _) => { _combatOpponentId = opponentId; QueueRedraw(); };
-        _sm.OnCombatEnded        += (_, _) => { _combatOpponentId = null; QueueRedraw(); };
-        _sm.OnPlayerEliminated   += (_, _) => QueueRedraw();
+        _sm.OnRoundStarted += _ => { Visible = true; QueueRedraw(); };
+        _sm.OnCombatStarted += (opponentId, _) => { _combatOpponentId = opponentId; QueueRedraw(); };
+        _sm.OnCombatEnded += (_, _) => { _combatOpponentId = null; QueueRedraw(); };
+        _sm.OnPlayerEliminated += (_, _) => QueueRedraw();
 
         // Seed from current state if already in match
         if (_sm.OwnState.HasValue)
@@ -70,14 +70,14 @@ public partial class PlayerList : Control
 
     private void DrawRow(int i, PlayerRow row, Font font, int fs)
     {
-        float y    = i * RowH;
-        var rect   = new Rect2(0, y, PanelW, RowH);
-        bool elim  = row.Hp <= 0;
+        float y = i * RowH;
+        var rect = new Rect2(0, y, PanelW, RowH);
+        bool elim = row.Hp <= 0;
 
         // Background
-        Color bg = row.IsSelf       ? BgSelf :
-                   row.IsOpponent   ? BgOpponent :
-                   elim             ? BgEliminated :
+        Color bg = row.IsSelf ? BgSelf :
+                   row.IsOpponent ? BgOpponent :
+                   elim ? BgEliminated :
                                       BgNormal;
         DrawRect(rect, bg);
 
@@ -116,23 +116,27 @@ public partial class PlayerList : Control
         {
             var s = _ownState.Value;
             list.Add(new PlayerRow(
-                Label:      "Me",
-                Hp:         s.NexusHealth,
-                Level:      s.Level,
-                IsSelf:     true,
+                Label: "Me",
+                Hp: s.NexusHealth,
+                Level: s.Level,
+                IsSelf: true,
                 IsOpponent: false));
         }
 
         if (_sm != null)
         {
+            int ownId = _ownState?.PlayerId ?? -1;
             foreach (var kv in _sm.Opponents.OrderBy(x => x.Key))
             {
+                // Skip own player — server broadcasts OtherPlayerInfo to all including sender
+                if (kv.Key == ownId) continue;
+
                 var opp = kv.Value;
                 list.Add(new PlayerRow(
-                    Label:      $"P{opp.PlayerId}",
-                    Hp:         opp.NexusHealth,
-                    Level:      opp.Level,
-                    IsSelf:     false,
+                    Label: $"P{opp.PlayerId}",
+                    Hp: opp.NexusHealth,
+                    Level: opp.Level,
+                    IsSelf: false,
                     IsOpponent: _combatOpponentId.HasValue && _combatOpponentId.Value == opp.PlayerId));
             }
         }
