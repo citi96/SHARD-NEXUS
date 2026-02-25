@@ -6,10 +6,11 @@ using Shared.Network.Messages;
 namespace Client.Scripts.UI;
 
 /// <summary>
-/// Renders three intervention buttons (Reposition, Accelerate, Barrier) during Combat.
+/// Renders all five intervention buttons during Combat.
 /// Uses _Draw() + _GuiInput() (same pattern as GridRenderer/BenchRenderer).
 /// Visible only while combat is active; hidden during Preparation and other phases.
 ///
+/// Each button shows: label, cost ("—" — no cost system yet), cooldown countdown.
 /// Sends UseIntervention to the server — currently always rejected with
 /// "Sistema interventi non ancora disponibile".
 ///
@@ -17,27 +18,32 @@ namespace Client.Scripts.UI;
 /// </summary>
 public partial class InterventionPanel : Control
 {
-    public const int ButtonW   = 90;
-    public const int ButtonH   = 32;
+    public const int ButtonW   = 80;
+    public const int ButtonH   = 48;
     public const int ButtonGap = 6;
 
     [ExportGroup("Colors")]
     [Export] public Color ButtonBg       = new(0.25f, 0.35f, 0.55f, 1.00f);
     [Export] public Color ButtonBorder   = new(0.50f, 0.65f, 0.90f, 1.00f);
     [Export] public Color ButtonText     = new(1.00f, 1.00f, 1.00f, 1.00f);
+    [Export] public Color CostText       = new(1.00f, 0.85f, 0.20f, 1.00f);
     [Export] public Color CooldownBg     = new(0.20f, 0.20f, 0.20f, 1.00f);
     [Export] public Color CooldownBorder = new(0.35f, 0.35f, 0.35f, 1.00f);
     [Export] public Color CooldownText   = new(0.50f, 0.50f, 0.50f, 1.00f);
+    [Export] public Color CooldownTimer  = new(1.00f, 0.80f, 0.10f, 1.00f);
     [Export] public Color StatusColor    = new(1.00f, 0.30f, 0.30f, 1.00f);
 
     private static readonly InterventionType[] ButtonTypes =
     {
         InterventionType.Reposition,
-        InterventionType.Accelerate,
+        InterventionType.Focus,
         InterventionType.Barrier,
+        InterventionType.Accelerate,
+        InterventionType.TacticalRetreat,
     };
 
-    private static readonly string[] ButtonLabels = { "Riposiziona", "Accelera", "Barriera" };
+    private static readonly string[] ButtonLabels =
+        { "Riposiziona", "Focus", "Barriera", "Accelera", "Ritiro" };
 
     private GameClient? _gameClient;
     private ClientStateManager? _sm;
@@ -86,7 +92,7 @@ public partial class InterventionPanel : Control
     public override void _Draw()
     {
         var font = ThemeDB.FallbackFont;
-        const int fs = 11;
+        const int fs = 10;
         bool onCooldown = _cooldownTimer > 0;
 
         for (int i = 0; i < ButtonTypes.Length; i++)
@@ -94,9 +100,22 @@ public partial class InterventionPanel : Control
             var rect = ButtonRect(i);
             DrawRect(rect, onCooldown ? CooldownBg : ButtonBg);
             DrawRect(rect, onCooldown ? CooldownBorder : ButtonBorder, false, 1f);
-            DrawString(font, rect.Position + new Vector2(6, ButtonH / 2f + fs / 2f),
-                ButtonLabels[i], HorizontalAlignment.Left, ButtonW - 6, fs,
+
+            // Label (top area of button)
+            DrawString(font, rect.Position + new Vector2(4, fs + 4),
+                ButtonLabels[i], HorizontalAlignment.Left, ButtonW - 4, fs,
                 onCooldown ? CooldownText : ButtonText);
+
+            // Cost row
+            DrawString(font, rect.Position + new Vector2(4, fs * 2 + 8),
+                "(—)", HorizontalAlignment.Left, ButtonW - 4, fs,
+                onCooldown ? CooldownText : CostText);
+
+            // Cooldown countdown (bottom of button)
+            if (onCooldown)
+                DrawString(font, rect.Position + new Vector2(4, ButtonH - 4),
+                    $"{_cooldownTimer:F1}s", HorizontalAlignment.Left, ButtonW - 4, fs,
+                    CooldownTimer);
         }
 
         if (_statusText.Length > 0 && _statusTimer > 0)
