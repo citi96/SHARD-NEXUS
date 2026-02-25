@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://bxxxx"]
 
 [ext_resource type="Script" uid="uid://cetixlr3q48lc" path="res://Scripts/GameClient.cs" id="1_gclient"]
+[ext_resource type="Script" path="res://Scripts/Grid/GridRenderer.cs" id="2_gridrenderer"]
 
 [node name="Main" type="Node" unique_id=296357644 node_paths=PackedStringArray("LoginPanel", "NameInput", "JoinButton", "StatusLabel", "LobbyPanel", "PlayersContainer", "ReadyButton")]
 script = ExtResource("1_gclient")
@@ -113,3 +114,7 @@ offset_bottom = -50.0
 grow_horizontal = 2
 grow_vertical = 0
 text = "Pronto"
+
+[node name="GridRenderer" type="Control" parent="." unique_id=2938471056]
+script = ExtResource("2_gridrenderer")
+position = Vector2(50, 300)
