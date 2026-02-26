@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Server.GameLogic;
 
 /// <summary>Mutable unit state during simulation. Not shared outside this assembly.</summary>
-internal sealed class CombatUnit
+public sealed class CombatUnit
 {
     public int InstanceId { get; init; }
     public int DefinitionId { get; init; }
@@ -11,24 +13,27 @@ internal sealed class CombatUnit
     public int Col { get; set; }
     public int Row { get; set; }
     public int Hp { get; set; }
-    public int MaxHp { get; init; }
     public int Mana { get; set; }
-    public int MaxMana { get; init; }
-    public int Attack { get; init; }
-    public int Defense { get; init; }
-    public int Mr { get; init; }
-    public int AttackRange { get; init; }
-    public float CritChance { get; set; }
-    public int CritMultiplier { get; set; } = 150;
-    public int AttackCooldown { get; init; }
-    public int AttackCooldownRemaining { get; set; }
-    public bool IsAlive { get; set; }
+    public bool IsAlive { get; set; } = true;
 
-    // Ability
+    // Base Stats (from Definition)
+    public int BaseMaxHp { get; init; }
+    public int BaseMaxMana { get; init; }
+    public int BaseAttack { get; init; }
+    public int BaseDefense { get; init; }
+    public int BaseMr { get; init; }
+    public int BaseAttackRange { get; init; }
+    public int BaseAttackCooldown { get; init; }
+    public float BaseCritChance { get; init; }
+    public int BaseCritMultiplier { get; init; } = 150;
+
+    // State
+    public int AttackCooldownRemaining { get; set; }
     public int[] AbilityIds { get; init; } = Array.Empty<int>();
+    public int Shield { get; set; }
+    public int MoveAccumulator { get; set; } = 100;
 
     // Intervention effects
-    public int Shield { get; set; }
     public int FocusTargetId { get; set; } = -1;
     public int FocusTicksLeft { get; set; }
     public int SpeedBoostTicksLeft { get; set; }
@@ -37,15 +42,64 @@ internal sealed class CombatUnit
     public int ReturnCol { get; set; }
     public int ReturnRow { get; set; }
 
-    // Ability effects
-    public int DamageReflectPct { get; set; }
-    public int DamageReflectTicksLeft { get; set; }
-    public int SlowPct { get; set; }
-    public int SlowTicksLeft { get; set; }
-    public int MoveAccumulator { get; set; } = 100;
+    // Modular Effects
+    private readonly List<IStatusEffect> _activeEffects = new();
+    public IReadOnlyList<IStatusEffect> ActiveEffects => _activeEffects;
 
-    // Striker specific effects
-    public int EmberbladeEmpoweredAttacks { get; set; }
-    public int BurnDps { get; set; }
-    public int BurnTicksLeft { get; set; }
+    public void AddEffect(IStatusEffect effect)
+    {
+        effect.OnApply(this);
+        _activeEffects.Add(effect);
+    }
+
+    public void UpdateEffects(int currentTick, List<Shared.Network.Messages.CombatEventRecord> events)
+    {
+        for (int i = _activeEffects.Count - 1; i >= 0; i--)
+        {
+            var effect = _activeEffects[i];
+            effect.OnTick(this, currentTick, events);
+            if (effect.IsExpired)
+            {
+                effect.OnRemove(this);
+                _activeEffects.RemoveAt(i);
+            }
+        }
+    }
+
+    public void TriggerOnAttack(CombatUnit target, List<CombatUnit> allUnits, List<Shared.Network.Messages.CombatEventRecord> events)
+    {
+        foreach (var effect in _activeEffects)
+        {
+            effect.OnAttack(this, target, allUnits, events);
+        }
+    }
+
+    public CombatUnitStats GetEffectiveStats()
+    {
+        var stats = new CombatUnitStats(
+            BaseMaxHp, BaseMaxMana, BaseAttack, BaseDefense, BaseMr,
+            BaseAttackRange, BaseAttackCooldown, BaseCritChance, BaseCritMultiplier, 
+            100 // Base MoveSpeed
+        );
+
+        foreach (var effect in _activeEffects)
+        {
+            effect.ModifyStats(ref stats);
+        }
+
+        return stats;
+    }
+
+    public void ApplyDamageModifier(ref int damage, List<Shared.Network.Messages.CombatEventRecord> events)
+    {
+        foreach (var effect in _activeEffects)
+        {
+            effect.OnBeforeTakeDamage(this, ref damage, events);
+        }
+    }
+
+    public bool IsActionable()
+    {
+        return IsAlive && !IsRetreating && !_activeEffects.Any(e => e.PreventsActions);
+    }
 }

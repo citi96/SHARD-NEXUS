@@ -43,6 +43,8 @@ public static class EchoCatalog
             new(1, "Pyroth", Rarity.Common,    EchoClass.Vanguard,  Resonance.Fire,      650, 100, 45, 45, 30, 0.60f, 1, 0.00f, new int[]{ 1 }),
             new(2, "Emberblade", Rarity.Common, EchoClass.Striker,   Resonance.Fire,      550, 100, 70, 25, 20, 0.90f, 1, 0.15f, new int[]{ 3 }),
             new(3, "Voltedge", Rarity.Uncommon, EchoClass.Striker,   Resonance.Lightning, 500, 100, 80, 20, 25, 1.00f, 1, 0.20f, new int[]{ 4 }),
+            new(4, "Iceshot", Rarity.Common,    EchoClass.Ranger,    Resonance.Frost,     500, 100, 60, 20, 20, 1.10f, 4, 0.00f, new int[]{ 5 }),
+            new(5, "Sparkbow", Rarity.Uncommon, EchoClass.Ranger,    Resonance.Lightning, 480, 100, 55, 18, 22, 1.30f, 4, 0.00f, new int[]{ 6 }),
             new(6, "Glacius", Rarity.Common,   EchoClass.Vanguard,  Resonance.Frost,     700, 100, 40, 40, 35, 0.55f, 1, 0.00f, new int[]{ 2 }),
         });
 }

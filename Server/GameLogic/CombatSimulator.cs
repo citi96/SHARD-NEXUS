@@ -5,6 +5,7 @@ using Server.Configuration;
 using Shared.Models.Enums;
 using Shared.Models.Structs;
 using Shared.Network.Messages;
+using Server.GameLogic.StatusEffects;
 
 namespace Server.GameLogic;
 
@@ -175,16 +176,16 @@ public sealed class CombatSimulator
                 Col = combatCol,
                 Row = boardRow,
                 Hp = hp,
-                MaxHp = hp,
+                BaseMaxHp = hp,
                 Mana = 0,
-                MaxMana = maxMana,
-                Attack = attack,
-                Defense = defense,
-                Mr = mr,
-                AttackRange = range,
-                CritChance = def.BaseCritChance,
-                CritMultiplier = 150,
-                AttackCooldown = cooldown,
+                BaseMaxMana = maxMana,
+                BaseAttack = attack,
+                BaseDefense = defense,
+                BaseMr = mr,
+                BaseAttackRange = range,
+                BaseCritChance = def.BaseCritChance,
+                BaseCritMultiplier = 150,
+                BaseAttackCooldown = cooldown,
                 AttackCooldownRemaining = 0,
                 IsAlive = true,
                 Shield = resBonuses.ShieldFlat,
@@ -244,29 +245,11 @@ public sealed class CombatSimulator
                 continue;
             }
 
-            // Tick effect timers
-            if (unit.FocusTicksLeft > 0) unit.FocusTicksLeft--;
-            if (unit.SpeedBoostTicksLeft > 0) unit.SpeedBoostTicksLeft--;
-            if (unit.DamageReflectTicksLeft > 0) unit.DamageReflectTicksLeft--;
-            if (unit.SlowTicksLeft > 0) unit.SlowTicksLeft--;
-
-            // Burn DoT tick
-            if (unit.BurnTicksLeft > 0)
+            if (!unit.IsActionable())
             {
-                unit.BurnTicksLeft--;
-                int burnDamage = unit.BurnDps / 60; // 60 ticks per second
-                if (burnDamage > 0)
-                {
-                    unit.Hp -= burnDamage;
-                    if (unit.Hp <= 0 && unit.IsAlive)
-                    {
-                        unit.IsAlive = false;
-                        tickEvents.Add(new CombatEventRecord { Type = "death", Target = unit.InstanceId });
-                    }
-                }
+                unit.UpdateEffects(_currentTick, tickEvents);
+                continue;
             }
-
-            if (!unit.IsAlive) continue;
 
             // Normal cooldown decrement; speed boost adds a second decrement (2× speed)
             unit.AttackCooldownRemaining = Math.Max(0, unit.AttackCooldownRemaining - 1);
@@ -278,31 +261,35 @@ public sealed class CombatSimulator
                 ? _units.FirstOrDefault(u => u.InstanceId == unit.FocusTargetId && u.IsAlive && !u.IsRetreating)
                 : FindNearestEnemy(unit);
 
-            if (target == null) continue;
+            if (target == null)
+            {
+                unit.UpdateEffects(_currentTick, tickEvents);
+                continue;
+            }
 
-            if (ChebyshevDistance(unit, target) <= unit.AttackRange)
+            var stats = unit.GetEffectiveStats();
+
+            if (ChebyshevDistance(unit, target) <= stats.AttackRange)
             {
                 if (unit.AttackCooldownRemaining == 0)
                 {
-                    int baseDamage = unit.Attack;
+                    int baseDamage = stats.Attack;
 
-                    // Emberblade Empowered Attack (+50% damage)
-                    bool isEmpowered = unit.EmberbladeEmpoweredAttacks > 0;
-                    if (isEmpowered)
-                    {
-                        baseDamage = baseDamage * 150 / 100;
-                        unit.EmberbladeEmpoweredAttacks--;
-                    }
+                    // Empowered effects (like Emberblade) are now handled via StatusEffects hooks 
+                    // or specialized events if needed. For now, we'll keep the physical attack roll.
 
-                    int rawDamage = Math.Max(1, baseDamage - target.Defense);
+                    int rawDamage = Math.Max(1, baseDamage - target.BaseDefense);
 
                     // Critical Strike Roll
                     float roll = (float)_rng.NextDouble();
-                    bool isCrit = roll < unit.CritChance;
+                    bool isCrit = roll < stats.CritChance;
                     if (isCrit)
                     {
-                        rawDamage = rawDamage * unit.CritMultiplier / 100;
+                        rawDamage = rawDamage * stats.CritMultiplier / 100;
                     }
+
+                    // Apply damage modifiers (e.g. Damage Reflection)
+                    target.ApplyDamageModifier(ref rawDamage, tickEvents);
 
                     // Shield absorbs damage first
                     int absorbed = Math.Min(target.Shield, rawDamage);
@@ -320,19 +307,16 @@ public sealed class CombatSimulator
                         Damage = rawDamage,
                     });
 
-                    // Emberblade Burn application
-                    if (isEmpowered)
-                    {
-                        target.BurnDps = 30;
-                        target.BurnTicksLeft = 180; // 3 seconds at 60Hz
-                    }
+                    // TRIGGER ATTACK HOOKS (Modular)
+                    unit.TriggerOnAttack(target, _units, tickEvents);
 
-                    unit.AttackCooldownRemaining = unit.AttackCooldown;
+                    unit.AttackCooldownRemaining = stats.AttackCooldown;
 
-                    // Damage reflect (e.g. Pyroth — Scudo di Fiamme)
-                    if (target.DamageReflectTicksLeft > 0 && unit.IsAlive)
+                    // DAMAGE REFLECTION (Modular)
+                    var reflectEffect = target.ActiveEffects.OfType<ReflectEffect>().FirstOrDefault();
+                    if (reflectEffect != null && unit.IsAlive)
                     {
-                        int reflected = rawDamage * target.DamageReflectPct / 100;
+                        int reflected = rawDamage * reflectEffect.ReflectPct / 100;
                         if (reflected > 0)
                         {
                             unit.Hp -= reflected;
@@ -343,52 +327,39 @@ public sealed class CombatSimulator
                                 Target = unit.InstanceId,
                                 Damage = reflected,
                             });
-
-                            if (unit.Hp <= 0)
-                            {
-                                unit.IsAlive = false;
-                                tickEvents.Add(new CombatEventRecord
-                                {
-                                    Type = "death",
-                                    Target = unit.InstanceId,
-                                });
-                            }
                         }
                     }
 
-                    // Mana regen: attacker and defender gain mana on hit
-                    unit.Mana = Math.Min(unit.MaxMana, unit.Mana + ManaPerAttack);
-                    target.Mana = Math.Min(target.MaxMana, target.Mana + ManaPerHit);
+                    // Mana regen
+                    unit.Mana = Math.Min(stats.MaxMana, unit.Mana + ManaPerAttack);
+                    target.Mana = Math.Min(stats.MaxMana, target.Mana + ManaPerHit);
 
-                    // Check ability cast (attacker only — defender casts on their own turn)
-                    if (unit.IsAlive && unit.Mana >= unit.MaxMana && unit.AbilityIds.Length > 0)
+                    // Check ability cast
+                    if (unit.IsAlive && unit.Mana >= stats.MaxMana && unit.AbilityIds.Length > 0)
                     {
-                        CastAbility(unit, tickEvents);
+                        Abilities.AbilityProcessor.Cast(unit.AbilityIds[0], unit, _units, tickEvents);
                         unit.Mana = 0;
                     }
 
                     if (target.Hp <= 0 && target.IsAlive)
                     {
                         target.IsAlive = false;
-                        tickEvents.Add(new CombatEventRecord
-                        {
-                            Type = "death",
-                            Target = target.InstanceId,
-                        });
+                        tickEvents.Add(new CombatEventRecord { Type = "death", Target = target.InstanceId });
                     }
                 }
             }
             else
             {
-                // Movement with slow support
-                int moveSpeed = unit.SlowTicksLeft > 0 ? (100 - unit.SlowPct) : 100;
-                unit.MoveAccumulator += moveSpeed;
+                // Movement with modular speed support
+                unit.MoveAccumulator += stats.MoveSpeed;
                 if (unit.MoveAccumulator >= 100)
                 {
                     unit.MoveAccumulator -= 100;
                     MoveToward(unit, target);
                 }
             }
+
+            unit.UpdateEffects(_currentTick, tickEvents);
         }
     }
 
@@ -454,73 +425,6 @@ public sealed class CombatSimulator
     // Ability casting
     // ──────────────────────────────────────────────────────────────────────────
 
-    private void CastAbility(CombatUnit caster, List<CombatEventRecord> events)
-    {
-        int abilityId = caster.AbilityIds[0];
-
-        switch (abilityId)
-        {
-            case 1: // Scudo di Fiamme (Pyroth) — reflect 20% damage for 4s
-                caster.DamageReflectPct = 20;
-                caster.DamageReflectTicksLeft = 240;
-                break;
-
-            case 2: // Muro di Gelo (Glacius) — +300 shield, slow adjacent enemies 40% for 3s
-                caster.Shield += 300;
-                foreach (var enemy in _units)
-                {
-                    if (!enemy.IsAlive || enemy.Team == caster.Team) continue;
-                    if (ChebyshevDistance(caster, enemy) > 1) continue;
-                    enemy.SlowPct = 40;
-                    enemy.SlowTicksLeft = 180;
-                }
-                break;
-
-            case 3: // Lama Ardente (Emberblade) — empower next 3 attacks
-                caster.EmberbladeEmpoweredAttacks = 3;
-                break;
-
-            case 4: // Fendente Lampo (Voltedge) — chain attack 80% damage to 3 targets
-                {
-                    var targets = _units
-                        .Where(u => u.IsAlive && u.Team != caster.Team)
-                        .OrderBy(u => ChebyshevDistance(caster, u))
-                        .Take(3)
-                        .ToList();
-
-                    foreach (var target in targets)
-                    {
-                        int rawDamage = caster.Attack * 80 / 100;
-                        int absorbed = Math.Min(target.Shield, rawDamage);
-                        target.Shield -= absorbed;
-                        int damage = rawDamage - absorbed;
-                        if (damage > 0) target.Hp -= damage;
-
-                        events.Add(new CombatEventRecord
-                        {
-                            Type = "chain_attack",
-                            Attacker = caster.InstanceId,
-                            Target = target.InstanceId,
-                            Damage = rawDamage
-                        });
-
-                        if (target.Hp <= 0 && target.IsAlive)
-                        {
-                            target.IsAlive = false;
-                            events.Add(new CombatEventRecord { Type = "death", Target = target.InstanceId });
-                        }
-                    }
-                }
-                break;
-        }
-
-        events.Add(new CombatEventRecord
-        {
-            Type = "cast",
-            Attacker = caster.InstanceId,
-            AbilityId = abilityId,
-        });
-    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // Helpers
@@ -588,9 +492,9 @@ public sealed class CombatSimulator
             {
                 Id = u.InstanceId,
                 Hp = u.Hp,
-                MaxHp = u.MaxHp,
+                MaxHp = u.BaseMaxHp,
                 Mana = u.Mana,
-                MaxMana = u.MaxMana,
+                MaxMana = u.BaseMaxMana,
                 Shield = u.Shield,
                 Col = u.Col,
                 Row = u.Row,
