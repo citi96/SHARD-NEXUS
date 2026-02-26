@@ -19,10 +19,11 @@ class Program
         var echoPoolSettings  = config.GetSection("EchoPoolSettings").Get<Server.Configuration.EchoPoolSettings>()  ?? new Server.Configuration.EchoPoolSettings();
         var shopSettings      = config.GetSection("ShopSettings").Get<Server.Configuration.ShopSettings>()          ?? new Server.Configuration.ShopSettings();
         var playerSettings    = config.GetSection("PlayerSettings").Get<Server.Configuration.PlayerSettings>()      ?? new Server.Configuration.PlayerSettings();
-        var combatSettings    = config.GetSection("CombatSettings").Get<Server.Configuration.CombatSettings>()     ?? new Server.Configuration.CombatSettings();
+        var combatSettings       = config.GetSection("CombatSettings").Get<Server.Configuration.CombatSettings>()             ?? new Server.Configuration.CombatSettings();
+        var interventionSettings = config.GetSection("InterventionSettings").Get<Server.Configuration.InterventionSettings>() ?? new Server.Configuration.InterventionSettings();
 
         Console.WriteLine($"Avvio del server SHARD NEXUS (Port: {port}, Max Players: {maxPlayers})...");
-        GameServer server = new GameServer(maxPlayers, port, ackTimeoutMs, ackMaxRetries, echoPoolSettings, shopSettings, playerSettings, combatSettings);
+        GameServer server = new GameServer(maxPlayers, port, ackTimeoutMs, ackMaxRetries, echoPoolSettings, shopSettings, playerSettings, combatSettings, interventionSettings);
 
         // Graceful shutdown via Ctrl+C
         Console.CancelKeyPress += (_, e) =>

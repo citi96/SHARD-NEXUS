@@ -17,34 +17,38 @@ public class ClientStateManager
 {
     // ── Stored State ──────────────────────────────────────────────────────────
 
-    public PlayerState?                                     OwnState            { get; private set; }
-    public IReadOnlyDictionary<int, OtherPlayerInfoMessage> Opponents           => _opponents;
-    public List<int>                                        ShopEchoIds         { get; private set; } = new();
-    public int                                              CurrentRound        { get; private set; }
-    public GamePhase                                        CurrentPhase        { get; private set; }
-    public int?                                             CombatOpponentId    { get; private set; }
-    public PlayerState?                                     CombatOpponentState { get; private set; }
-    public int?                                             LastCombatWinnerId  { get; private set; }
-    public int?                                             LastCombatDamage    { get; private set; }
-    public int?                                             GameWinnerId        { get; private set; }
-    public FeaturedMatchMessage?                            FeaturedMatch       { get; private set; }
+    public PlayerState? OwnState { get; private set; }
+    public IReadOnlyDictionary<int, OtherPlayerInfoMessage> Opponents => _opponents;
+    public List<int> ShopEchoIds { get; private set; } = new();
+    public int CurrentRound { get; private set; }
+    public GamePhase CurrentPhase { get; private set; }
+    public int? CombatOpponentId { get; private set; }
+    public PlayerState? CombatOpponentState { get; private set; }
+    public int? LastCombatWinnerId { get; private set; }
+    public int? LastCombatDamage { get; private set; }
+    public int? GameWinnerId { get; private set; }
+    public FeaturedMatchMessage? FeaturedMatch { get; private set; }
+    public int CurrentEnergy { get; private set; }
+    public int MaxEnergy { get; private set; } = 15;
 
     private readonly Dictionary<int, OtherPlayerInfoMessage> _opponents = new();
 
     // ── Events ────────────────────────────────────────────────────────────────
 
-    public event Action<PlayerState>?               OnOwnStateChanged;
+    public event Action<PlayerState>? OnOwnStateChanged;
     public event Action<int, OtherPlayerInfoMessage>? OnOpponentInfoChanged;
-    public event Action<List<int>>?                 OnShopChanged;
-    public event Action<int, PlayerState>?          OnCombatStarted;
-    public event Action<CombatSnapshotPayload>?     OnCombatSnapshot;
-    public event Action<int, int>?                  OnCombatEnded;
-    public event Action<int>?                       OnGameEnded;
-    public event Action<int>?                       OnRoundStarted;
-    public event Action<GamePhase, float>?          OnPhaseChanged;
-    public event Action<int, int>?                  OnPlayerEliminated;
-    public event Action<FeaturedMatchMessage>?      OnFeaturedMatchChanged;
-    public event Action<ActionRejectedMessage>?     OnActionRejected;
+    public event Action<List<int>>? OnShopChanged;
+    public event Action<int, PlayerState>? OnCombatStarted;
+    public event Action<CombatSnapshotPayload>? OnCombatSnapshot;
+    public event Action<int, int>? OnCombatEnded;
+    public event Action<int>? OnGameEnded;
+    public event Action<int>? OnRoundStarted;
+    public event Action<GamePhase, float>? OnPhaseChanged;
+    public event Action<int, int>? OnPlayerEliminated;
+    public event Action<FeaturedMatchMessage>? OnFeaturedMatchChanged;
+    public event Action<ActionRejectedMessage>? OnActionRejected;
+    public event Action<int, int>? OnEnergyChanged;
+    public event Action<InterventionActivatedMessage>? OnInterventionActivated;
 
     // ── Entry Point ───────────────────────────────────────────────────────────
 
@@ -53,17 +57,19 @@ public class ClientStateManager
         switch (message.Type)
         {
             case MessageType.PlayerStateUpdate: HandlePlayerStateUpdate(message); break;
-            case MessageType.OtherPlayerInfo:   HandleOtherPlayerInfo(message);   break;
-            case MessageType.ShopRefreshed:     HandleShopRefreshed(message);     break;
-            case MessageType.CombatStarted:     HandleCombatStarted(message);     break;
-            case MessageType.CombatUpdate:      HandleCombatUpdate(message);      break;
-            case MessageType.CombatEnded:       HandleCombatEnded(message);       break;
-            case MessageType.GameEnded:         HandleGameEnded(message);         break;
-            case MessageType.StartRound:        HandleStartRound(message);        break;
-            case MessageType.PhaseChanged:      HandlePhaseChanged(message);      break;
-            case MessageType.PlayerEliminated:  HandlePlayerEliminated(message);  break;
-            case MessageType.FeaturedMatch:     HandleFeaturedMatch(message);     break;
-            case MessageType.ActionRejected:    HandleActionRejected(message);    break;
+            case MessageType.OtherPlayerInfo: HandleOtherPlayerInfo(message); break;
+            case MessageType.ShopRefreshed: HandleShopRefreshed(message); break;
+            case MessageType.CombatStarted: HandleCombatStarted(message); break;
+            case MessageType.CombatUpdate: HandleCombatUpdate(message); break;
+            case MessageType.CombatEnded: HandleCombatEnded(message); break;
+            case MessageType.GameEnded: HandleGameEnded(message); break;
+            case MessageType.StartRound: HandleStartRound(message); break;
+            case MessageType.PhaseChanged: HandlePhaseChanged(message); break;
+            case MessageType.PlayerEliminated: HandlePlayerEliminated(message); break;
+            case MessageType.FeaturedMatch: HandleFeaturedMatch(message); break;
+            case MessageType.ActionRejected: HandleActionRejected(message); break;
+            case MessageType.InterventionActivated: HandleInterventionActivated(message); break;
+            case MessageType.EnergyUpdate: HandleEnergyUpdate(message); break;
         }
     }
 
@@ -97,7 +103,8 @@ public class ClientStateManager
     {
         var msg = message.DeserializePayload<CombatStartedMessage>();
         if (msg == null) return;
-        CombatOpponentId    = msg.OpponentId;
+        CurrentEnergy = 0;
+        CombatOpponentId = msg.OpponentId;
         CombatOpponentState = msg.OpponentState;
         OnCombatStarted?.Invoke(msg.OpponentId, msg.OpponentState);
     }
@@ -116,7 +123,7 @@ public class ClientStateManager
         var msg = message.DeserializePayload<CombatEndedMessage>();
         if (msg == null) return;
         LastCombatWinnerId = msg.WinnerId;
-        LastCombatDamage   = msg.DamageDealt;
+        LastCombatDamage = msg.DamageDealt;
         OnCombatEnded?.Invoke(msg.WinnerId, msg.DamageDealt);
     }
 
@@ -124,8 +131,8 @@ public class ClientStateManager
     {
         var msg = message.DeserializePayload<GameEndedMessage>();
         if (msg == null) return;
-        GameWinnerId  = msg.WinnerId;
-        CurrentPhase  = GamePhase.GameOver;
+        GameWinnerId = msg.WinnerId;
+        CurrentPhase = GamePhase.GameOver;
         OnGameEnded?.Invoke(msg.WinnerId);
     }
 
@@ -165,5 +172,21 @@ public class ClientStateManager
         var msg = message.DeserializePayload<ActionRejectedMessage>();
         if (msg == null) return;
         OnActionRejected?.Invoke(msg);
+    }
+
+    private void HandleInterventionActivated(NetworkMessage message)
+    {
+        var msg = message.DeserializePayload<InterventionActivatedMessage>();
+        if (msg == null) return;
+        OnInterventionActivated?.Invoke(msg);
+    }
+
+    private void HandleEnergyUpdate(NetworkMessage message)
+    {
+        var msg = message.DeserializePayload<EnergyUpdateMessage>();
+        if (msg == null) return;
+        CurrentEnergy = msg.Energy;
+        MaxEnergy = msg.MaxEnergy;
+        OnEnergyChanged?.Invoke(msg.Energy, msg.MaxEnergy);
     }
 }

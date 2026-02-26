@@ -34,7 +34,8 @@ public class GameServer
         EchoPoolSettings echoPoolSettings,
         ShopSettings shopSettings,
         PlayerSettings playerSettings,
-        CombatSettings combatSettings)
+        CombatSettings combatSettings,
+        InterventionSettings interventionSettings)
     {
         _matchManager = new MatchManager();
         _networkManager = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
@@ -46,7 +47,7 @@ public class GameServer
 
         _echoPoolManager = new EchoPoolManager(echoPoolSettings, _echoCatalog);
         _shopManager = new ShopManager(shopSettings, _echoPoolManager, _playerManager, _echoCatalog);
-        _combatManager = new CombatManager(_playerManager, _networkManager, _echoCatalog, combatSettings);
+        _combatManager = new CombatManager(_playerManager, _networkManager, _echoCatalog, combatSettings, interventionSettings);
 
         WireEvents();
     }
@@ -57,6 +58,7 @@ public class GameServer
         _playerManager.OnPlayerStateChanged += OnPlayerStateChanged;
         _lobbyManager.OnMatchStarted += OnMatchStarted;
         _combatManager.OnAllCombatsComplete += OnAllCombatsComplete;
+        _combatManager.OnActionRejected += SendActionRejected;
         _networkManager.OnMessageReceived += HandleMessage;
         _networkManager.OnClientConnected += HandleClientConnected;
         _networkManager.OnClientDisconnected += _playerManager.RemovePlayer;
@@ -234,7 +236,14 @@ public class GameServer
                 break;
 
             case MessageType.UseIntervention:
-                SendActionRejected(clientId, "UseIntervention", "Sistema interventi non ancora disponibile");
+                var intMsg = message.DeserializePayload<UseInterventionMessage>();
+                if (intMsg == null) break;
+                if (!Enum.TryParse<InterventionType>(intMsg.CardId, out var intType))
+                {
+                    SendActionRejected(clientId, "UseIntervention", "Tipo intervento non valido");
+                    break;
+                }
+                _combatManager.TryQueueIntervention(clientId, intType, intMsg.TargetId);
                 break;
         }
     }

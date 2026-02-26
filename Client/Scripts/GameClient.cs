@@ -118,9 +118,9 @@ public partial class GameClient : Node
         => SendMessage(NetworkMessage.Create(MessageType.RemoveFromBoard,
            new RemoveFromBoardMessage { EchoInstanceId = echoInstanceId }));
 
-    public void SendUseIntervention(InterventionType type)
+    public void SendUseIntervention(InterventionType type, int targetId = -1)
         => SendMessage(NetworkMessage.Create(MessageType.UseIntervention,
-           new UseInterventionMessage { CardId = type.ToString(), TargetId = 0 }));
+           new UseInterventionMessage { CardId = type.ToString(), TargetId = targetId }));
 
     public override void _Process(double delta)
     {

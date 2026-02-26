@@ -37,6 +37,8 @@ public enum MessageType : byte
     OtherPlayerInfo = 62,
     FeaturedMatch = 63,    // Server → All: broadcast the featured match for observer mode
     ActionRejected = 64,   // Server → Client: action rejected with reason
+    InterventionActivated = 65, // Server → All: intervention validated and applied
+    EnergyUpdate = 66,          // Server → Client: energy bar update
 
     // --- Errors ---
     Error = 255

@@ -1,4 +1,5 @@
 #nullable enable
+using Client.Scripts.UI;
 using Godot;
 using Shared.Models.Enums;
 using Shared.Models.Structs;
@@ -7,17 +8,19 @@ namespace Client.Scripts.Grid;
 
 /// <summary>
 /// Parent Control node for the battle board UI layer (grid + bench).
-/// Mediates between GridRenderer, BenchRenderer, and GameClient:
+/// Mediates between GridRenderer, BenchRenderer, InterventionPanel, and GameClient:
 /// initializes renderers with the shared ClientStateManager, translates bench
-/// selection + cell click into a PositionEcho network call, and toggles board
-/// visibility based on the current game phase.
+/// selection + cell click into a PositionEcho network call, handles intervention
+/// target selection (InterventionRequested → CombatCellClicked → SendUseIntervention),
+/// and toggles board visibility based on the current game phase.
 ///
 /// Expected scene hierarchy:
 ///   Main (GameClient)
-///     └── BattleBoard (GameBoardController)
-///           ├── GridRenderer  (GridRenderer)
-///           └── BenchArea     (Control)
-///                 └── BenchRenderer (BenchRenderer)
+///     ├── BattleBoard (GameBoardController)
+///     │     ├── GridRenderer  (GridRenderer)
+///     │     └── BenchArea     (Control)
+///     │           └── BenchRenderer (BenchRenderer)
+///     └── InterventionPanel (InterventionPanel)
 /// </summary>
 public partial class GameBoardController : Control
 {
@@ -27,7 +30,11 @@ public partial class GameBoardController : Control
     private GameClient? _gameClient;
     private GridRenderer? _gridRenderer;
     private BenchRenderer? _benchRenderer;
+    private InterventionPanel? _interventionPanel;
+    private ClientStateManager? _sm;
     private int _selectedInstanceId = -1;
+    private InterventionType? _pendingIntervention = null;
+    private int _pendingButtonIndex = -1;
 
     public override void _Ready()
     {
@@ -35,20 +42,23 @@ public partial class GameBoardController : Control
         _gridRenderer = GetNode<GridRenderer>(GridRendererPath);
         _benchRenderer = GetNode<BenchRenderer>(BenchRendererPath);
 
-        var sm = _gameClient.StateManager;
-        _gridRenderer.Initialize(sm);
-        _benchRenderer.Initialize(sm);
+        // InterventionPanel is a sibling under GameClient
+        _interventionPanel = GetParent().GetNode<InterventionPanel>("InterventionPanel");
+
+        _sm = _gameClient.StateManager;
+        _gridRenderer.Initialize(_sm);
+        _benchRenderer.Initialize(_sm);
 
         _gridRenderer.CellClicked += OnGridCellClicked;
         _gridRenderer.RemoveFromBoardRequested += OnRemoveFromBoardRequested;
+        _gridRenderer.CombatCellClicked += OnCombatCellClicked;
         _benchRenderer.EchoSelected += OnBenchEchoSelected;
         _benchRenderer.SellRequested += OnSellRequested;
+        _interventionPanel.InterventionRequested += OnInterventionRequested;
 
-        sm.OnPhaseChanged += OnPhaseChanged;
-        // OnRoundStarted fires when the server starts a match — treated as the start
-        // of the Preparation phase until the server sends explicit PhaseChanged messages.
-        sm.OnRoundStarted += OnRoundStarted;
-        sm.OnCombatStarted += OnCombatStarted;
+        _sm.OnPhaseChanged += OnPhaseChanged;
+        _sm.OnRoundStarted += OnRoundStarted;
+        _sm.OnCombatStarted += OnCombatStarted;
 
         Visible = false;
     }
@@ -59,17 +69,20 @@ public partial class GameBoardController : Control
         {
             _gridRenderer.CellClicked -= OnGridCellClicked;
             _gridRenderer.RemoveFromBoardRequested -= OnRemoveFromBoardRequested;
+            _gridRenderer.CombatCellClicked -= OnCombatCellClicked;
         }
         if (_benchRenderer != null)
         {
             _benchRenderer.EchoSelected -= OnBenchEchoSelected;
             _benchRenderer.SellRequested -= OnSellRequested;
         }
-        if (_gameClient == null) return;
-        var sm = _gameClient.StateManager;
-        sm.OnPhaseChanged -= OnPhaseChanged;
-        sm.OnRoundStarted -= OnRoundStarted;
-        sm.OnCombatStarted -= OnCombatStarted;
+        if (_interventionPanel != null)
+            _interventionPanel.InterventionRequested -= OnInterventionRequested;
+
+        if (_sm == null) return;
+        _sm.OnPhaseChanged -= OnPhaseChanged;
+        _sm.OnRoundStarted -= OnRoundStarted;
+        _sm.OnCombatStarted -= OnCombatStarted;
     }
 
     private void OnBenchEchoSelected(int instanceId, int slotIndex)
@@ -106,6 +119,64 @@ public partial class GameBoardController : Control
         ClearSelection();
     }
 
+    private void OnInterventionRequested(int typeIndex)
+    {
+        var type = InterventionPanel.ButtonTypes[typeIndex];
+
+        // Accelerate has no target — send immediately
+        if (type == InterventionType.Accelerate)
+        {
+            _gameClient?.SendUseIntervention(type, -1);
+            _interventionPanel?.SetPendingMode(false, -1);
+            return;
+        }
+
+        _pendingIntervention = type;
+        _pendingButtonIndex = typeIndex;
+
+        bool allyTarget = type != InterventionType.Focus;
+        bool enemyTarget = type == InterventionType.Focus;
+        _gridRenderer?.SetTargetSelectionMode(true, allyTarget, enemyTarget);
+    }
+
+    private void OnCombatCellClicked(int col, int row)
+    {
+        if (_pendingIntervention == null) return;
+
+        int id = GetInstanceIdAtCell(col, row);
+        if (id == -1) return; // empty cell or invalid
+
+        _gameClient?.SendUseIntervention(_pendingIntervention.Value, id);
+        CancelInterventionSelection();
+    }
+
+    /// <summary>Returns the unit instance ID at (col, row) on the combined combat board, or -1.</summary>
+    private int GetInstanceIdAtCell(int col, int row)
+    {
+        const int ac = GridRenderer.AllyCols;
+
+        if (col < ac)
+        {
+            var ids = _sm?.OwnState?.BoardEchoInstanceIds;
+            int idx = row * ac + col;
+            return (ids != null && idx < ids.Length) ? ids[idx] : -1;
+        }
+        else
+        {
+            var ids = _sm?.CombatOpponentState?.BoardEchoInstanceIds;
+            int idx = row * ac + (col - ac);
+            return (ids != null && idx < ids.Length) ? ids[idx] : -1;
+        }
+    }
+
+    private void CancelInterventionSelection()
+    {
+        _pendingIntervention = null;
+        _pendingButtonIndex = -1;
+        _gridRenderer?.SetTargetSelectionMode(false, false, false);
+        _interventionPanel?.SetPendingMode(false, -1);
+    }
+
     private void OnRoundStarted(int _roundNumber)
     {
         Visible = true;
@@ -126,6 +197,8 @@ public partial class GameBoardController : Control
 
         if (phase != GamePhase.Preparation)
             ClearSelection();
+
+        CancelInterventionSelection();
     }
 
     private void ClearSelection()

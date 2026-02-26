@@ -16,6 +16,10 @@ namespace Client.Scripts.Grid;
 /// Board index contract (ally side, matches server PositionEcho handler):
 ///   boardIndex = row * AllyCols + col
 ///
+/// Also handles:
+///   - Target highlighting during intervention target selection (SetTargetSelectionMode).
+///   - VFX overlays for active interventions (OnInterventionActivated via state manager).
+///
 /// Initialization: call Initialize(ClientStateManager) from GameBoardController._Ready()
 /// after both nodes are in the scene tree.
 /// </summary>
@@ -55,6 +59,14 @@ public partial class GridRenderer : Control
     [Export] public Color ResonanceShadow = new(0.25f, 0.20f, 0.35f, 1.00f);
     [Export] public Color ResonancePrism = new(0.80f, 0.80f, 0.80f, 1.00f);
 
+    [ExportGroup("VFX / Target Colors")]
+    [Export] public Color TargetHighlight = new(1.00f, 1.00f, 0.20f, 0.30f);
+    [Export] public Color VfxBarrier = new(1.00f, 0.85f, 0.10f, 0.70f);
+    [Export] public Color VfxFocus = new(1.00f, 0.10f, 0.10f, 0.55f);
+    [Export] public Color VfxAccelerate = new(0.10f, 1.00f, 0.30f, 0.40f);
+    [Export] public Color VfxReposition = new(0.10f, 0.60f, 1.00f, 0.70f);
+    [Export] public Color VfxRetreat = new(0.60f, 0.60f, 0.60f, 0.50f);
+
     /// <summary>
     /// Emitted when the player left-clicks an ally cell during the Preparation phase.
     /// </summary>
@@ -68,15 +80,29 @@ public partial class GridRenderer : Control
     [Signal]
     public delegate void RemoveFromBoardRequestedEventHandler(int instanceId);
 
+    /// <summary>
+    /// Emitted when a combat cell is clicked during intervention target selection.
+    /// Only fires when SetTargetSelectionMode is active and the clicked column matches
+    /// the required target side (ally or enemy).
+    /// </summary>
+    [Signal]
+    public delegate void CombatCellClickedEventHandler(int col, int row);
+
     private ClientStateManager? _stateManager;
     private PlayerState? _ownState;
     private GamePhase _currentPhase = GamePhase.WaitingForPlayers;
     private Vector2I _hovered = new(-1, -1);
     private Vector2I _dropZone = new(-1, -1);
 
+    private bool _targetSelectionMode = false;
+    private bool _targetAlly = false;
+    private bool _targetEnemy = false;
+
     private readonly Dictionary<int, CombatUnitState> _combatUnits = [];
     private readonly Dictionary<int, float> _attackFlash = [];
     private readonly Dictionary<int, float> _damageFlash = [];
+    // VFX: key = unitInstanceId (unit-specific) or -playerId (whole-team, e.g. Accelerate)
+    private readonly Dictionary<int, (string Type, int PlayerId, float TimeLeft)> _vfx = [];
 
     public override void _Ready()
     {
@@ -95,6 +121,7 @@ public partial class GridRenderer : Control
         _stateManager.OnOwnStateChanged += OnOwnStateChanged;
         _stateManager.OnPhaseChanged += OnPhaseChanged;
         _stateManager.OnCombatSnapshot += OnCombatSnapshot;
+        _stateManager.OnInterventionActivated += OnInterventionActivated;
     }
 
     public override void _ExitTree()
@@ -103,6 +130,7 @@ public partial class GridRenderer : Control
         _stateManager.OnOwnStateChanged -= OnOwnStateChanged;
         _stateManager.OnPhaseChanged -= OnPhaseChanged;
         _stateManager.OnCombatSnapshot -= OnCombatSnapshot;
+        _stateManager.OnInterventionActivated -= OnInterventionActivated;
     }
 
     /// <summary>
@@ -121,10 +149,23 @@ public partial class GridRenderer : Control
         QueueRedraw();
     }
 
+    /// <summary>
+    /// Activates target-selection highlight mode over ally and/or enemy columns.
+    /// When active, left-clicks emit CombatCellClicked instead of CellClicked.
+    /// </summary>
+    public void SetTargetSelectionMode(bool active, bool allyTarget, bool enemyTarget)
+    {
+        _targetSelectionMode = active;
+        _targetAlly = allyTarget;
+        _targetEnemy = enemyTarget;
+        QueueRedraw();
+    }
+
     public override void _Process(double delta)
     {
         bool dirty = TickFlash(_attackFlash, (float)delta);
         dirty |= TickFlash(_damageFlash, (float)delta);
+        dirty |= TickVfx((float)delta);
         if (dirty) QueueRedraw();
     }
 
@@ -136,6 +177,8 @@ public partial class GridRenderer : Control
         DrawDropZoneBorders();
         DrawGridLines();
         DrawDivider();
+        DrawTargetHighlights();
+        DrawVfxEffects();
     }
 
     private void DrawBackgrounds()
@@ -302,6 +345,49 @@ public partial class GridRenderer : Control
                  Divider, 2f);
     }
 
+    private void DrawTargetHighlights()
+    {
+        if (!_targetSelectionMode) return;
+        for (int col = 0; col < TotalCols; col++)
+            for (int row = 0; row < Rows; row++)
+            {
+                bool ally = col < AllyCols;
+                if ((_targetAlly && ally) || (_targetEnemy && !ally))
+                    DrawRect(CellRect(col, row), TargetHighlight);
+            }
+    }
+
+    private void DrawVfxEffects()
+    {
+        if (_vfx.Count == 0) return;
+
+        foreach (var (key, (type, _, _)) in _vfx)
+        {
+            Color overlay = VfxColor(type);
+
+            if (key < 0)
+            {
+                // Whole-team (Accelerate): key = -playerId
+                int pid = -key;
+                bool isOwnTeam = pid == (_stateManager?.OwnState?.PlayerId ?? -1);
+                for (int col = 0; col < TotalCols; col++)
+                {
+                    bool allyCol = col < AllyCols;
+                    if ((isOwnTeam && allyCol) || (!isOwnTeam && !allyCol))
+                        for (int row = 0; row < Rows; row++)
+                            DrawRect(CellRect(col, row), overlay);
+                }
+            }
+            else
+            {
+                // Unit-specific: Barrier, Reposition, Retreat, Focus target
+                var cell = FindCellForUnit(key);
+                if (cell.HasValue)
+                    DrawRect(CellRect(cell.Value.Col, cell.Value.Row), overlay);
+            }
+        }
+    }
+
     public override void _GuiInput(InputEvent @event)
     {
         switch (@event)
@@ -332,11 +418,19 @@ public partial class GridRenderer : Control
 
     private void HandleClick(Vector2 position)
     {
-        if (_currentPhase != GamePhase.Preparation) return;
-
         int col = Mathf.Clamp((int)(position.X / CellSize), 0, TotalCols - 1);
         int row = Mathf.Clamp((int)(position.Y / CellSize), 0, Rows - 1);
 
+        // Intervention target selection takes priority during combat
+        if (_currentPhase == GamePhase.Combat && _targetSelectionMode)
+        {
+            bool ally = col < AllyCols;
+            if ((_targetAlly && ally) || (_targetEnemy && !ally))
+                EmitSignal(SignalName.CombatCellClicked, col, row);
+            return;
+        }
+
+        if (_currentPhase != GamePhase.Preparation) return;
         if (col >= AllyCols) return;
 
         EmitSignal(SignalName.CellClicked, col, row);
@@ -386,6 +480,24 @@ public partial class GridRenderer : Control
         QueueRedraw();
     }
 
+    private void OnInterventionActivated(InterventionActivatedMessage msg)
+    {
+        float dur = msg.InterventionType switch
+        {
+            "Reposition" => 0.5f,
+            "Focus" => 3.0f,
+            "Barrier" => 2.0f,
+            "Accelerate" => 4.0f,
+            "TacticalRetreat" => 2.0f,
+            _ => 1.0f,
+        };
+
+        // Whole-team effects (Accelerate) keyed as -playerId; unit-specific keyed as unitId
+        int key = msg.InterventionType == "Accelerate" ? -msg.PlayerId : msg.TargetUnitId;
+        _vfx[key] = (msg.InterventionType, msg.PlayerId, dur);
+        QueueRedraw();
+    }
+
     /// <summary>
     /// Sets the active game phase and refreshes the grid accordingly.
     /// Called by GameBoardController when the server drives a phase transition
@@ -407,12 +519,15 @@ public partial class GridRenderer : Control
             _combatUnits.Clear();
             _attackFlash.Clear();
             _damageFlash.Clear();
+            _vfx.Clear();
+            _targetSelectionMode = false;
         }
 
         QueueRedraw();
     }
 
     private void OnPhaseChanged(GamePhase phase, float _duration) => SetGamePhase(phase);
+
 
     private static Rect2 CellRect(int col, int row) =>
         new(col * CellSize, row * CellSize, CellSize, CellSize);
@@ -446,10 +561,53 @@ public partial class GridRenderer : Control
         return true;
     }
 
+    private bool TickVfx(float delta)
+    {
+        if (_vfx.Count == 0) return false;
+        foreach (var key in _vfx.Keys.ToList())
+        {
+            var (type, pid, left) = _vfx[key];
+            left -= delta;
+            if (left <= 0) _vfx.Remove(key);
+            else _vfx[key] = (type, pid, left);
+        }
+        return true;
+    }
+
+    /// <summary>Returns the (Col, Row) of a unit on the combined board, or null if not found.</summary>
+    private (int Col, int Row)? FindCellForUnit(int instanceId)
+    {
+        if (_ownState.HasValue)
+        {
+            var ids = _ownState.Value.BoardEchoInstanceIds;
+            for (int i = 0; i < ids.Length; i++)
+                if (ids[i] == instanceId)
+                    return (i % AllyCols, i / AllyCols);
+        }
+
+        var oIds = _stateManager?.CombatOpponentState?.BoardEchoInstanceIds;
+        if (oIds != null)
+            for (int i = 0; i < oIds.Length; i++)
+                if (oIds[i] == instanceId)
+                    return (i % AllyCols + AllyCols, i / AllyCols);
+
+        return null;
+    }
+
+    private Color VfxColor(string type) => type switch
+    {
+        "Barrier" => VfxBarrier,
+        "Focus" => VfxFocus,
+        "Accelerate" => VfxAccelerate,
+        "Reposition" => VfxReposition,
+        "TacticalRetreat" => VfxRetreat,
+        _ => new Color(1f, 1f, 1f, 0.3f),
+    };
+
     private static Color HpColor(float fraction) =>
         fraction > 0.5f ? new Color(0.15f, 0.80f, 0.15f) :
         fraction > 0.25f ? new Color(0.90f, 0.75f, 0.10f) :
-        new Color(0.90f, 0.15f, 0.10f);
+                           new Color(0.90f, 0.15f, 0.10f);
 
     private Color ClassColor(EchoClass? cls) => cls switch
     {
@@ -459,7 +617,7 @@ public partial class GridRenderer : Control
         EchoClass.Caster => ClassCaster,
         EchoClass.Support => ClassSupport,
         EchoClass.Assassin => ClassAssassin,
-        _ => new Color(0.3f, 0.3f, 0.3f)
+        _ => new Color(0.3f, 0.3f, 0.3f),
     };
 
     private Color ResonanceColor(Resonance? res) => res switch
@@ -472,6 +630,6 @@ public partial class GridRenderer : Control
         Resonance.Light => ResonanceLight,
         Resonance.Shadow => ResonanceShadow,
         Resonance.Prism => ResonancePrism,
-        _ => new Color(0.5f, 0.5f, 0.5f)
+        _ => new Color(0.5f, 0.5f, 0.5f),
     };
 }
