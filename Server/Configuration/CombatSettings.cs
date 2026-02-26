@@ -23,10 +23,10 @@ public class CombatSettings
     public Dictionary<string, int> AttackCooldownByClass { get; set; } = new()
     {
         ["Vanguard"] = 30,
-        ["Striker"]  = 25,
-        ["Ranger"]   = 45,
-        ["Caster"]   = 40,
-        ["Support"]  = 50,
+        ["Striker"] = 25,
+        ["Ranger"] = 45,
+        ["Caster"] = 40,
+        ["Support"] = 50,
         ["Assassin"] = 20,
     };
 
@@ -34,10 +34,10 @@ public class CombatSettings
     public Dictionary<string, int> AttackRangeByClass { get; set; } = new()
     {
         ["Vanguard"] = 1,
-        ["Striker"]  = 1,
-        ["Ranger"]   = 3,
-        ["Caster"]   = 2,
-        ["Support"]  = 2,
+        ["Striker"] = 1,
+        ["Ranger"] = 3,
+        ["Caster"] = 2,
+        ["Support"] = 2,
         ["Assassin"] = 1,
     };
 }

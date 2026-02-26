@@ -28,5 +28,3 @@ public static class AbilityCatalog
     public static AbilityRecord? GetById(int id)
         => _byId.TryGetValue(id, out var r) ? r : null;
 }
-
-public readonly record struct AbilityRecord(int Id, string Name);

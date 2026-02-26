@@ -31,20 +31,20 @@ public class InterventionSettings
     /// <summary>Energy cost per intervention type (key = InterventionType.ToString()).</summary>
     public Dictionary<string, int> EnergyCosts { get; set; } = new()
     {
-        ["Reposition"]    = 3,
-        ["Focus"]         = 5,
-        ["Barrier"]       = 4,
-        ["Accelerate"]    = 6,
+        ["Reposition"] = 3,
+        ["Focus"] = 5,
+        ["Barrier"] = 4,
+        ["Accelerate"] = 6,
         ["TacticalRetreat"] = 8,
     };
 
     /// <summary>Cooldown in seconds per intervention type.</summary>
     public Dictionary<string, float> CooldownSeconds { get; set; } = new()
     {
-        ["Reposition"]    = 8f,
-        ["Focus"]         = 12f,
-        ["Barrier"]       = 15f,
-        ["Accelerate"]    = 20f,
+        ["Reposition"] = 8f,
+        ["Focus"] = 12f,
+        ["Barrier"] = 15f,
+        ["Accelerate"] = 20f,
         ["TacticalRetreat"] = 25f,
     };
 }

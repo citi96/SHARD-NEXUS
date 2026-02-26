@@ -273,12 +273,12 @@ public class ShopManager
     {
         return rarity switch
         {
-            Rarity.Common    => 1,
-            Rarity.Uncommon  => 2,
-            Rarity.Rare      => 3,
-            Rarity.Epic      => 4,
+            Rarity.Common => 1,
+            Rarity.Uncommon => 2,
+            Rarity.Rare => 3,
+            Rarity.Epic => 4,
             Rarity.Legendary => 5,
-            _                => 1
+            _ => 1
         };
     }
 }

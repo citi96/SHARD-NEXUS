@@ -28,25 +28,25 @@ public sealed class CombatSimulator
     // Team 1 occupies cols 7-13 (right, mirrored: col = 13 - (idx%7))
     // Combined board: 14 wide × 4 tall
     // ──────────────────────────────────────────────
-    private const int BoardCols   = 7;
+    private const int BoardCols = 7;
     private const int CombatWidth = 14;
 
     private const int ManaPerAttack = 10;
     private const int ManaPerHit = 5;
 
-    private readonly CombatSettings       _settings;
+    private readonly CombatSettings _settings;
     private readonly InterventionSettings _intSettings;
-    private readonly ResonanceSettings    _resSettings;
+    private readonly ResonanceSettings _resSettings;
     private readonly Dictionary<int, EchoDefinition> _catalog;
-    private readonly List<CombatUnit>     _units;
-    private readonly int  _p0Id;
-    private readonly int  _p1Id;
-    private readonly int  _round;
+    private readonly List<CombatUnit> _units;
+    private readonly int _p0Id;
+    private readonly int _p1Id;
+    private readonly int _round;
 
     // ── Incremental state ─────────────────────────
-    private int  _currentTick = 0;
+    private int _currentTick = 0;
 
-    public bool          IsDone      { get; private set; }
+    public bool IsDone { get; private set; }
     public CombatResult? FinalResult { get; private set; }
 
     public CombatSimulator(
@@ -59,13 +59,13 @@ public sealed class CombatSimulator
         int seed,
         int round)
     {
-        _settings    = settings;
+        _settings = settings;
         _intSettings = intSettings;
         _resSettings = resSettings;
-        _catalog     = catalog.ToDictionary(d => d.Id);
-        _p0Id        = p0.PlayerId;
-        _p1Id        = p1.PlayerId;
-        _round       = round;
+        _catalog = catalog.ToDictionary(d => d.Id);
+        _p0Id = p0.PlayerId;
+        _p1Id = p1.PlayerId;
+        _round = round;
 
         _units = new List<CombatUnit>();
         LoadUnits(p0, team: 0);
@@ -137,10 +137,10 @@ public sealed class CombatSimulator
 
             int multiplier = 100;
 
-            int hp      = def.BaseHealth  * multiplier / 100;
+            int hp = def.BaseHealth * multiplier / 100;
             hp += hp * resBonuses.HpPct / 100;
 
-            int attack  = def.BaseAttack  * multiplier / 100;
+            int attack = def.BaseAttack * multiplier / 100;
             attack += attack * resBonuses.AtkPct / 100;
 
             int defense = def.BaseDefense * multiplier / 100;
@@ -148,10 +148,10 @@ public sealed class CombatSimulator
 
             int mr = def.BaseMR * multiplier / 100;
 
-            int maxMana = def.BaseMana    * multiplier / 100;
+            int maxMana = def.BaseMana * multiplier / 100;
 
             string className = def.Class.ToString();
-            
+
             // Calculate cooldown from AttackSpeed: cd = ticks_per_sec (60) / attack_speed
             int cooldown = (int)(60f / def.BaseAttackSpeed);
             if (resBonuses.AsPct > 0)
@@ -159,32 +159,32 @@ public sealed class CombatSimulator
 
             int range = def.BaseAttackRange;
 
-            int boardCol  = idx % BoardCols;
-            int boardRow  = idx / BoardCols;
+            int boardCol = idx % BoardCols;
+            int boardRow = idx / BoardCols;
             int combatCol = team == 0
                 ? boardCol
                 : CombatWidth - 1 - boardCol;
 
             _units.Add(new CombatUnit
             {
-                InstanceId              = instanceId,
-                DefinitionId            = definitionId,
-                Team                    = team,
-                Col                     = combatCol,
-                Row                     = boardRow,
-                Hp                      = hp,
-                MaxHp                   = hp,
-                Mana                    = 0,
-                MaxMana                 = maxMana,
-                Attack                  = attack,
-                Defense                 = defense,
-                Mr                      = mr,
-                AttackRange             = range,
-                AttackCooldown          = cooldown,
+                InstanceId = instanceId,
+                DefinitionId = definitionId,
+                Team = team,
+                Col = combatCol,
+                Row = boardRow,
+                Hp = hp,
+                MaxHp = hp,
+                Mana = 0,
+                MaxMana = maxMana,
+                Attack = attack,
+                Defense = defense,
+                Mr = mr,
+                AttackRange = range,
+                AttackCooldown = cooldown,
                 AttackCooldownRemaining = 0,
-                IsAlive                 = true,
-                Shield                  = resBonuses.ShieldFlat,
-                AbilityIds              = def.AbilityIds,
+                IsAlive = true,
+                Shield = resBonuses.ShieldFlat,
+                AbilityIds = def.AbilityIds,
             });
         }
     }
@@ -201,10 +201,10 @@ public sealed class CombatSimulator
             {
                 string key = $"{r.ResonanceType}_{tier}";
                 if (!_resSettings.Bonuses.TryGetValue(key, out var bonusDict)) continue;
-                atk    += bonusDict.GetValueOrDefault("AtkPct");
-                def    += bonusDict.GetValueOrDefault("DefPct");
-                hp     += bonusDict.GetValueOrDefault("HpPct");
-                aspd   += bonusDict.GetValueOrDefault("AsPct");
+                atk += bonusDict.GetValueOrDefault("AtkPct");
+                def += bonusDict.GetValueOrDefault("DefPct");
+                hp += bonusDict.GetValueOrDefault("HpPct");
+                aspd += bonusDict.GetValueOrDefault("AsPct");
                 shield += bonusDict.GetValueOrDefault("ShieldFlat");
             }
         }
@@ -274,10 +274,10 @@ public sealed class CombatSimulator
 
                     tickEvents.Add(new CombatEventRecord
                     {
-                        Type     = "attack",
+                        Type = "attack",
                         Attacker = unit.InstanceId,
-                        Target   = target.InstanceId,
-                        Damage   = rawDamage,
+                        Target = target.InstanceId,
+                        Damage = rawDamage,
                     });
 
                     unit.AttackCooldownRemaining = unit.AttackCooldown;
@@ -291,10 +291,10 @@ public sealed class CombatSimulator
                             unit.Hp -= reflected;
                             tickEvents.Add(new CombatEventRecord
                             {
-                                Type     = "reflect",
+                                Type = "reflect",
                                 Attacker = target.InstanceId,
-                                Target   = unit.InstanceId,
-                                Damage   = reflected,
+                                Target = unit.InstanceId,
+                                Damage = reflected,
                             });
 
                             if (unit.Hp <= 0)
@@ -302,7 +302,7 @@ public sealed class CombatSimulator
                                 unit.IsAlive = false;
                                 tickEvents.Add(new CombatEventRecord
                                 {
-                                    Type   = "death",
+                                    Type = "death",
                                     Target = unit.InstanceId,
                                 });
                             }
@@ -325,7 +325,7 @@ public sealed class CombatSimulator
                         target.IsAlive = false;
                         tickEvents.Add(new CombatEventRecord
                         {
-                            Type   = "death",
+                            Type = "death",
                             Target = target.InstanceId,
                         });
                     }
@@ -351,7 +351,7 @@ public sealed class CombatSimulator
 
     private void ApplyIntervention(PendingIntervention inv)
     {
-        int team   = inv.Team;
+        int team = inv.Team;
         var allies = _units.Where(u => u.Team == team && u.IsAlive && !u.IsRetreating).ToList();
         var target = _units.FirstOrDefault(u => u.InstanceId == inv.TargetId && u.IsAlive);
 
@@ -374,7 +374,7 @@ public sealed class CombatSimulator
                 {
                     foreach (var ally in allies)
                     {
-                        ally.FocusTargetId  = inv.TargetId;
+                        ally.FocusTargetId = inv.TargetId;
                         ally.FocusTicksLeft = _intSettings.FocusDurationTicks;
                     }
                 }
@@ -393,11 +393,11 @@ public sealed class CombatSimulator
             case InterventionType.TacticalRetreat:
                 if (target?.Team == team && !target.IsRetreating)
                 {
-                    target.IsRetreating     = true;
+                    target.IsRetreating = true;
                     target.RetreatTicksLeft = _intSettings.RetreatDurationTicks;
-                    target.ReturnCol        = target.Col;
-                    target.ReturnRow        = target.Row;
-                    target.Col              = team == 0 ? 0 : CombatWidth - 1;
+                    target.ReturnCol = target.Col;
+                    target.ReturnRow = target.Row;
+                    target.Col = team == 0 ? 0 : CombatWidth - 1;
                 }
                 break;
         }
@@ -499,18 +499,18 @@ public sealed class CombatSimulator
     private CombatSnapshotPayload TakeSnapshot(int tick, IEnumerable<CombatEventRecord> events)
         => new()
         {
-            Tick   = tick,
-            Units  = _units.Select(u => new CombatUnitState
+            Tick = tick,
+            Units = _units.Select(u => new CombatUnitState
             {
-                Id      = u.InstanceId,
-                Hp      = u.Hp,
-                MaxHp   = u.MaxHp,
-                Mana    = u.Mana,
+                Id = u.InstanceId,
+                Hp = u.Hp,
+                MaxHp = u.MaxHp,
+                Mana = u.Mana,
                 MaxMana = u.MaxMana,
-                Shield  = u.Shield,
-                Col     = u.Col,
-                Row     = u.Row,
-                Alive   = u.IsAlive,
+                Shield = u.Shield,
+                Col = u.Col,
+                Row = u.Row,
+                Alive = u.IsAlive,
             }).ToList(),
             Events = events.ToList(),
         };
@@ -535,77 +535,16 @@ public sealed class CombatSimulator
         }
         else
         {
-            winnerId    = s0.Count >= s1.Count ? _p0Id : _p1Id;
-            loserId     = winnerId == _p0Id ? _p1Id : _p0Id;
+            winnerId = s0.Count >= s1.Count ? _p0Id : _p1Id;
+            loserId = winnerId == _p0Id ? _p1Id : _p0Id;
             survivorIds = (winnerId == _p0Id ? s0 : s1).Select(u => u.InstanceId).ToArray();
         }
 
         return new CombatResult(
-            WinnerPlayerId:      winnerId,
-            LoserPlayerId:       loserId,
-            DamageDealt:         2 + _round + survivorIds.Length,
+            WinnerPlayerId: winnerId,
+            LoserPlayerId: loserId,
+            DamageDealt: 2 + _round + survivorIds.Length,
             SurvivorInstanceIds: survivorIds,
-            ReplayData:          Array.Empty<byte>());
+            ReplayData: Array.Empty<byte>());
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Supporting types
-// ──────────────────────────────────────────────────────────────────────────────
-
-/// <summary>Mutable unit state during simulation. Not shared outside this assembly.</summary>
-internal sealed class CombatUnit
-{
-    public int  InstanceId               { get; init; }
-    public int  DefinitionId             { get; init; }
-    public int  Team                     { get; init; }
-    public int  Col                      { get; set; }
-    public int  Row                      { get; set; }
-    public int  Hp                       { get; set; }
-    public int  MaxHp                    { get; init; }
-    public int  Mana                     { get; set; }
-    public int  MaxMana                  { get; init; }
-    public int  Attack                   { get; init; }
-    public int  Defense                  { get; init; }
-    public int  Mr                       { get; init; }
-    public int  AttackRange              { get; init; }
-    public int  AttackCooldown           { get; init; }
-    public int  AttackCooldownRemaining  { get; set; }
-    public bool IsAlive                  { get; set; }
-
-    // ── Ability state ───────────────────────────────
-    public int[] AbilityIds              { get; init; } = Array.Empty<int>();
-
-    // ── Intervention effect state ─────────────────
-    public int  Shield              { get; set; }
-    public int  FocusTargetId       { get; set; } = -1;
-    public int  FocusTicksLeft      { get; set; }
-    public int  SpeedBoostTicksLeft { get; set; }
-    public bool IsRetreating        { get; set; }
-    public int  RetreatTicksLeft    { get; set; }
-    public int  ReturnCol           { get; set; }
-    public int  ReturnRow           { get; set; }
-
-    // ── Ability effect state ──────────────────────
-    public int  DamageReflectPct       { get; set; }
-    public int  DamageReflectTicksLeft { get; set; }
-    public int  SlowPct                { get; set; }
-    public int  SlowTicksLeft          { get; set; }
-    public int  MoveAccumulator        { get; set; } = 100;
-}
-
-/// <summary>Output from <see cref="CombatSimulator.RunBatch"/>.</summary>
-public sealed class CombatSimulationResult
-{
-    public CombatResult                        Result    { get; }
-    public IReadOnlyList<CombatSnapshotPayload> Snapshots { get; }
-
-    public CombatSimulationResult(CombatResult result, List<CombatSnapshotPayload> snapshots)
-    {
-        Result    = result;
-        Snapshots = snapshots;
-    }
-}
-
-/// <summary>An intervention queued by a player to be applied before the next simulation batch.</summary>
-public record PendingIntervention(int PlayerId, int Team, InterventionType Type, int TargetId);

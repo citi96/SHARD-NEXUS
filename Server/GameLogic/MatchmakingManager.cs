@@ -5,10 +5,6 @@ using Shared.Models.Structs;
 
 namespace Server.GameLogic;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Supporting data types
-// ──────────────────────────────────────────────────────────────────────────────
-
 /// <summary>Represents a single combat pairing for a round.</summary>
 public sealed class CombatPair
 {
@@ -24,22 +20,18 @@ public sealed class CombatPair
 /// <summary>Output of <see cref="MatchmakingManager.ComputePairings"/>.</summary>
 public sealed class MatchmakingResult
 {
-    public IReadOnlyList<CombatPair> Pairs    { get; init; } = Array.Empty<CombatPair>();
-    public FeaturedMatchInfo?        Featured { get; init; }
+    public IReadOnlyList<CombatPair> Pairs { get; init; } = Array.Empty<CombatPair>();
+    public FeaturedMatchInfo? Featured { get; init; }
 }
 
 /// <summary>The match chosen for broadcast to all clients / observers.</summary>
 public sealed class FeaturedMatchInfo
 {
-    public int    Player1Id { get; init; }
-    public int    Player2Id { get; init; }
+    public int Player1Id { get; init; }
+    public int Player2Id { get; init; }
     /// <summary>"AtRisk" or "HighHP"</summary>
-    public string Reason    { get; init; } = string.Empty;
+    public string Reason { get; init; } = string.Empty;
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
-// MatchmakingManager
-// ──────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
 /// Computes per-round player pairings according to the VS-009 rules:
@@ -52,8 +44,6 @@ public sealed class FeaturedMatchInfo
 /// </summary>
 public sealed class MatchmakingManager
 {
-    // ── Constants ─────────────────────────────────────────────────────────────
-
     /// <summary>Sentinel PlayerId used for ghost opponents.</summary>
     public const int GhostPlayerId = -99;
 
@@ -63,15 +53,11 @@ public sealed class MatchmakingManager
     /// <summary>Preferred HP delta between paired players.</summary>
     public const int HpProximityThreshold = 10;
 
-    // ── Internal state ─────────────────────────────────────────────────────────
-
     /// <summary>playerId → opponent faced last round (-1 if none).</summary>
     private readonly Dictionary<int, int> _lastOpponent = new();
 
     /// <summary>playerId → snapshot of the team that last beat them (used as ghost).</summary>
     private readonly Dictionary<int, PlayerState> _ghostBank = new();
-
-    // ── Public API ─────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Builds pairings for the upcoming round and selects the Featured Match.
@@ -87,7 +73,6 @@ public sealed class MatchmakingManager
 
         if (players.Count == 1)
         {
-            // Only one real player — they must fight a ghost
             var solo = players[0];
             return new MatchmakingResult
             {
@@ -101,8 +86,8 @@ public sealed class MatchmakingManager
             .ThenBy(p => p.PlayerId)
             .ToList();
 
-        var paired   = new HashSet<int>();
-        var pairs    = new List<CombatPair>();
+        var paired = new HashSet<int>();
+        var pairs = new List<CombatPair>();
 
         foreach (var player in sorted)
         {
@@ -151,30 +136,26 @@ public sealed class MatchmakingManager
     public void RecordRoundResult(int winnerId, int loserId, PlayerState winnerBoardSnapshot)
     {
         _lastOpponent[winnerId] = loserId;
-        _lastOpponent[loserId]  = winnerId;
-        _ghostBank[loserId]     = winnerBoardSnapshot;
+        _lastOpponent[loserId] = winnerId;
+        _ghostBank[loserId] = winnerBoardSnapshot;
     }
-
-    // ── Private helpers ────────────────────────────────────────────────────────
 
     private CombatPair BuildGhostPair(PlayerState player)
     {
         PlayerState ghost;
         if (_ghostBank.TryGetValue(player.PlayerId, out var banked))
         {
-            // Ghost = team that last beat this player
             ghost = banked with { PlayerId = GhostPlayerId };
         }
         else
         {
-            // No previous loss → ghost mirrors the player's own board
             ghost = player with { PlayerId = GhostPlayerId };
         }
 
         return new CombatPair
         {
-            P0Id       = player.PlayerId,
-            P1Id       = GhostPlayerId,
+            P0Id = player.PlayerId,
+            P1Id = GhostPlayerId,
             GhostState = ghost,
         };
     }
@@ -185,7 +166,6 @@ public sealed class MatchmakingManager
     {
         if (pairs.Count == 0) return null;
 
-        // Build HP lookup
         var hpLookup = players.ToDictionary(p => p.PlayerId, p => p.NexusHealth);
 
         int GetHp(int id) => hpLookup.TryGetValue(id, out int hp) ? hp : 0;
@@ -200,7 +180,7 @@ public sealed class MatchmakingManager
                 {
                     Player1Id = pair.P0Id,
                     Player2Id = pair.P1Id == GhostPlayerId ? pair.P0Id : pair.P1Id,
-                    Reason    = "AtRisk",
+                    Reason = "AtRisk",
                 };
         }
 
@@ -216,7 +196,7 @@ public sealed class MatchmakingManager
         {
             Player1Id = top.P0Id,
             Player2Id = top.P1Id,
-            Reason    = "HighHP",
+            Reason = "HighHP",
         };
     }
 }

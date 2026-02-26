@@ -122,14 +122,14 @@ public partial class ResonancePanel : Control
 
     private static Color GetResonanceColor(string resonanceType) => resonanceType switch
     {
-        nameof(Resonance.Fire)      => new Color(1.00f, 0.30f, 0.10f, 1.00f),
-        nameof(Resonance.Frost)     => new Color(0.30f, 0.80f, 1.00f, 1.00f),
+        nameof(Resonance.Fire) => new Color(1.00f, 0.30f, 0.10f, 1.00f),
+        nameof(Resonance.Frost) => new Color(0.30f, 0.80f, 1.00f, 1.00f),
         nameof(Resonance.Lightning) => new Color(1.00f, 0.90f, 0.00f, 1.00f),
-        nameof(Resonance.Earth)     => new Color(0.60f, 0.40f, 0.10f, 1.00f),
-        nameof(Resonance.Void)      => new Color(0.50f, 0.10f, 0.70f, 1.00f),
-        nameof(Resonance.Light)     => new Color(1.00f, 0.95f, 0.70f, 1.00f),
-        nameof(Resonance.Shadow)    => new Color(0.25f, 0.20f, 0.35f, 1.00f),
-        nameof(Resonance.Prism)     => new Color(0.80f, 0.80f, 0.80f, 1.00f),
-        _                           => new Color(0.50f, 0.50f, 0.50f, 1.00f),
+        nameof(Resonance.Earth) => new Color(0.60f, 0.40f, 0.10f, 1.00f),
+        nameof(Resonance.Void) => new Color(0.50f, 0.10f, 0.70f, 1.00f),
+        nameof(Resonance.Light) => new Color(1.00f, 0.95f, 0.70f, 1.00f),
+        nameof(Resonance.Shadow) => new Color(0.25f, 0.20f, 0.35f, 1.00f),
+        nameof(Resonance.Prism) => new Color(0.80f, 0.80f, 0.80f, 1.00f),
+        _ => new Color(0.50f, 0.50f, 0.50f, 1.00f),
     };
 }
