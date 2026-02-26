@@ -50,8 +50,25 @@ public sealed class CombatUnit
 
     public void AddEffect(IStatusEffect effect)
     {
+        if (effect.IsDebuff && _activeEffects.Any(e => e.Id == "Immunity" && !e.IsExpired))
+        {
+            return;
+        }
+
         effect.OnApply(this);
         _activeEffects.Add(effect);
+    }
+
+    public void ClearDebuffs()
+    {
+        for (int i = _activeEffects.Count - 1; i >= 0; i--)
+        {
+            if (_activeEffects[i].IsDebuff)
+            {
+                _activeEffects[i].OnRemove(this);
+                _activeEffects.RemoveAt(i);
+            }
+        }
     }
 
     public void UpdateEffects(int currentTick, ICombatEventDispatcher dispatcher)

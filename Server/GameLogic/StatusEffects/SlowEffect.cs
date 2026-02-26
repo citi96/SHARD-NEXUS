@@ -3,7 +3,7 @@ namespace Server.GameLogic.StatusEffects;
 /// <summary>
 /// Reduces movement speed by a percentage.
 /// </summary>
-public class SlowEffect : BaseStatusEffect
+public class SlowEffect : BaseDebuffEffect
 {
     public override string Id => "Slow";
     private readonly int _pct;

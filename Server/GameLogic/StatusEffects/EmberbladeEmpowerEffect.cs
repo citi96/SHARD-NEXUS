@@ -6,7 +6,7 @@ namespace Server.GameLogic.StatusEffects;
 /// <summary>
 /// Reflects a portion of damage taken back to the attacker.
 /// </summary>
-public class EmberbladeEmpowerEffect : BaseStatusEffect
+public class EmberbladeEmpowerEffect : BaseBuffEffect
 {
     public override string Id => "EmberbladeEmpower";
     private int _charges = 3;

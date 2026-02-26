@@ -45,4 +45,5 @@ public interface IStatusEffect
 
     bool IsExpired { get; }
     bool PreventsActions { get; }
+    bool IsDebuff { get; }
 }

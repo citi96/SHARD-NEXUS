@@ -46,5 +46,8 @@ public static class EchoCatalog
             new(4, "Iceshot", Rarity.Common,    EchoClass.Ranger,    Resonance.Frost,     500, 100, 60, 20, 20, 1.10f, 4, 0.00f, new int[]{ 5 }),
             new(5, "Sparkbow", Rarity.Uncommon, EchoClass.Ranger,    Resonance.Lightning, 480, 100, 55, 18, 22, 1.30f, 4, 0.00f, new int[]{ 6 }),
             new(6, "Glacius", Rarity.Common,   EchoClass.Vanguard,  Resonance.Frost,     700, 100, 40, 40, 35, 0.55f, 1, 0.00f, new int[]{ 2 }),
+            // ID, Name, Rarity, Class, Resonance, HP, Mana, ATK, DEF, MR, AS, Range, Crit, Abilities
+            new(9, "Flameheart", Rarity.Common, EchoClass.Support, Resonance.Fire, 500, 100, 40, 20, 25, 0.80f, 2, 0.00f, new int[]{ 7 }),
+            new(10, "Beacon", Rarity.Common, EchoClass.Support, Resonance.Light, 480, 100, 35, 18, 30, 0.70f, 2, 0.00f, new int[]{ 8 }),
         });
 }

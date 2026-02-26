@@ -13,6 +13,7 @@ public abstract class BaseStatusEffect : IStatusEffect
     public int RemainingTicks { get; protected set; }
     public bool IsExpired => RemainingTicks <= 0;
     public virtual bool PreventsActions => false;
+    public abstract bool IsDebuff { get; }
 
     protected BaseStatusEffect(int durationTicks)
     {

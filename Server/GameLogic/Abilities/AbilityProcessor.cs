@@ -17,6 +17,8 @@ public static class AbilityProcessor
         { 4, new ChainAttackHandler(targetsCount: 3, damagePct: 80) }, // Voltedge
         { 5, new IceshotHandler() }, // Iceshot
         { 6, new SparkbowAbilityHandler() }, // Sparkbow
+        { 7, new FlameheartAbilityHandler() },
+        { 8, new BeaconAbilityHandler() },
     };
 
     public static void Cast(int abilityId, CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)

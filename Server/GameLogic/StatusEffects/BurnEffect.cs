@@ -6,7 +6,7 @@ namespace Server.GameLogic.StatusEffects;
 /// <summary>
 /// Deals damage over time according to a DPS value.
 /// </summary>
-public class BurnEffect : BaseStatusEffect
+public class BurnEffect : BaseDebuffEffect
 {
     public override string Id => "Burn";
     private readonly int _dps;

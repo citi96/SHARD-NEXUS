@@ -6,7 +6,7 @@ namespace Server.GameLogic.StatusEffects;
 /// <summary>
 /// Reflects a portion of damage taken back to the attacker.
 /// </summary>
-public class ReflectEffect : BaseStatusEffect
+public class ReflectEffect : BaseBuffEffect
 {
     public override string Id => "Reflect";
     private readonly int _reflectPct;
