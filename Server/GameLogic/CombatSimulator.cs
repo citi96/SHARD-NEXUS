@@ -143,14 +143,18 @@ public sealed class CombatSimulator
             int defense = def.BaseDefense * multiplier / 100;
             defense += defense * resBonuses.DefPct / 100;
 
+            int mr = def.BaseMR * multiplier / 100;
+
             int maxMana = def.BaseMana    * multiplier / 100;
 
             string className = def.Class.ToString();
-            int cooldown = _settings.AttackCooldownByClass.TryGetValue(className, out int cd) ? cd : 30;
+            
+            // Calculate cooldown from AttackSpeed: cd = ticks_per_sec (60) / attack_speed
+            int cooldown = (int)(60f / def.BaseAttackSpeed);
             if (resBonuses.AsPct > 0)
                 cooldown = cooldown * 100 / (100 + resBonuses.AsPct);
 
-            int range = _settings.AttackRangeByClass.TryGetValue(className, out int r) ? r : 1;
+            int range = def.BaseAttackRange;
 
             int boardCol  = idx % BoardCols;
             int boardRow  = idx / BoardCols;
@@ -171,6 +175,7 @@ public sealed class CombatSimulator
                 MaxMana                 = maxMana,
                 Attack                  = attack,
                 Defense                 = defense,
+                Mr                      = mr,
                 AttackRange             = range,
                 AttackCooldown          = cooldown,
                 AttackCooldownRemaining = 0,
@@ -475,6 +480,7 @@ internal sealed class CombatUnit
     public int  MaxMana                  { get; init; }
     public int  Attack                   { get; init; }
     public int  Defense                  { get; init; }
+    public int  Mr                       { get; init; }
     public int  AttackRange              { get; init; }
     public int  AttackCooldown           { get; init; }
     public int  AttackCooldownRemaining  { get; set; }

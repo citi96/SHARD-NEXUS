@@ -16,5 +16,8 @@ public readonly record struct EchoDefinition(
     int BaseMana,
     int BaseAttack,
     int BaseDefense,
+    int BaseMR,
+    float BaseAttackSpeed,
+    int BaseAttackRange,
     int[] AbilityIds
 );
