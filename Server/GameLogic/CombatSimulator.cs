@@ -31,6 +31,9 @@ public sealed class CombatSimulator
     private const int BoardCols   = 7;
     private const int CombatWidth = 14;
 
+    private const int ManaPerAttack = 10;
+    private const int ManaPerHit = 5;
+
     private readonly CombatSettings       _settings;
     private readonly InterventionSettings _intSettings;
     private readonly ResonanceSettings    _resSettings;
@@ -181,6 +184,7 @@ public sealed class CombatSimulator
                 AttackCooldownRemaining = 0,
                 IsAlive                 = true,
                 Shield                  = resBonuses.ShieldFlat,
+                AbilityIds              = def.AbilityIds,
             });
         }
     }
@@ -237,8 +241,10 @@ public sealed class CombatSimulator
             }
 
             // Tick effect timers
-            if (unit.FocusTicksLeft > 0)      unit.FocusTicksLeft--;
-            if (unit.SpeedBoostTicksLeft > 0)  unit.SpeedBoostTicksLeft--;
+            if (unit.FocusTicksLeft > 0) unit.FocusTicksLeft--;
+            if (unit.SpeedBoostTicksLeft > 0) unit.SpeedBoostTicksLeft--;
+            if (unit.DamageReflectTicksLeft > 0) unit.DamageReflectTicksLeft--;
+            if (unit.SlowTicksLeft > 0) unit.SlowTicksLeft--;
 
             // Normal cooldown decrement; speed boost adds a second decrement (2× speed)
             unit.AttackCooldownRemaining = Math.Max(0, unit.AttackCooldownRemaining - 1);
@@ -276,7 +282,45 @@ public sealed class CombatSimulator
 
                     unit.AttackCooldownRemaining = unit.AttackCooldown;
 
-                    if (target.Hp <= 0)
+                    // Damage reflect (e.g. Pyroth — Scudo di Fiamme)
+                    if (target.DamageReflectTicksLeft > 0 && unit.IsAlive)
+                    {
+                        int reflected = rawDamage * target.DamageReflectPct / 100;
+                        if (reflected > 0)
+                        {
+                            unit.Hp -= reflected;
+                            tickEvents.Add(new CombatEventRecord
+                            {
+                                Type     = "reflect",
+                                Attacker = target.InstanceId,
+                                Target   = unit.InstanceId,
+                                Damage   = reflected,
+                            });
+
+                            if (unit.Hp <= 0)
+                            {
+                                unit.IsAlive = false;
+                                tickEvents.Add(new CombatEventRecord
+                                {
+                                    Type   = "death",
+                                    Target = unit.InstanceId,
+                                });
+                            }
+                        }
+                    }
+
+                    // Mana regen: attacker and defender gain mana on hit
+                    unit.Mana = Math.Min(unit.MaxMana, unit.Mana + ManaPerAttack);
+                    target.Mana = Math.Min(target.MaxMana, target.Mana + ManaPerHit);
+
+                    // Check ability cast (attacker only — defender casts on their own turn)
+                    if (unit.IsAlive && unit.Mana >= unit.MaxMana && unit.AbilityIds.Length > 0)
+                    {
+                        CastAbility(unit, tickEvents);
+                        unit.Mana = 0;
+                    }
+
+                    if (target.Hp <= 0 && target.IsAlive)
                     {
                         target.IsAlive = false;
                         tickEvents.Add(new CombatEventRecord
@@ -289,7 +333,14 @@ public sealed class CombatSimulator
             }
             else
             {
-                MoveToward(unit, target);
+                // Movement with slow support
+                int moveSpeed = unit.SlowTicksLeft > 0 ? (100 - unit.SlowPct) : 100;
+                unit.MoveAccumulator += moveSpeed;
+                if (unit.MoveAccumulator >= 100)
+                {
+                    unit.MoveAccumulator -= 100;
+                    MoveToward(unit, target);
+                }
             }
         }
     }
@@ -350,6 +401,41 @@ public sealed class CombatSimulator
                 }
                 break;
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Ability casting
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private void CastAbility(CombatUnit caster, List<CombatEventRecord> events)
+    {
+        int abilityId = caster.AbilityIds[0];
+
+        switch (abilityId)
+        {
+            case 1: // Scudo di Fiamme (Pyroth) — reflect 20% damage for 4s
+                caster.DamageReflectPct = 20;
+                caster.DamageReflectTicksLeft = 240;
+                break;
+
+            case 2: // Muro di Gelo (Glacius) — +300 shield, slow adjacent enemies 40% for 3s
+                caster.Shield += 300;
+                foreach (var enemy in _units)
+                {
+                    if (!enemy.IsAlive || enemy.Team == caster.Team) continue;
+                    if (ChebyshevDistance(caster, enemy) > 1) continue;
+                    enemy.SlowPct = 40;
+                    enemy.SlowTicksLeft = 180;
+                }
+                break;
+        }
+
+        events.Add(new CombatEventRecord
+        {
+            Type = "cast",
+            Attacker = caster.InstanceId,
+            AbilityId = abilityId,
+        });
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -421,6 +507,7 @@ public sealed class CombatSimulator
                 MaxHp   = u.MaxHp,
                 Mana    = u.Mana,
                 MaxMana = u.MaxMana,
+                Shield  = u.Shield,
                 Col     = u.Col,
                 Row     = u.Row,
                 Alive   = u.IsAlive,
@@ -486,6 +573,9 @@ internal sealed class CombatUnit
     public int  AttackCooldownRemaining  { get; set; }
     public bool IsAlive                  { get; set; }
 
+    // ── Ability state ───────────────────────────────
+    public int[] AbilityIds              { get; init; } = Array.Empty<int>();
+
     // ── Intervention effect state ─────────────────
     public int  Shield              { get; set; }
     public int  FocusTargetId       { get; set; } = -1;
@@ -495,6 +585,13 @@ internal sealed class CombatUnit
     public int  RetreatTicksLeft    { get; set; }
     public int  ReturnCol           { get; set; }
     public int  ReturnRow           { get; set; }
+
+    // ── Ability effect state ──────────────────────
+    public int  DamageReflectPct       { get; set; }
+    public int  DamageReflectTicksLeft { get; set; }
+    public int  SlowPct                { get; set; }
+    public int  SlowTicksLeft          { get; set; }
+    public int  MoveAccumulator        { get; set; } = 100;
 }
 
 /// <summary>Output from <see cref="CombatSimulator.RunBatch"/>.</summary>
