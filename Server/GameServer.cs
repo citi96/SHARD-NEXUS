@@ -20,10 +20,10 @@ public class GameServer
     private readonly ShopManager _shopManager;
     private readonly CombatManager _combatManager;
     private readonly MatchmakingManager _matchmakingManager;
+    private readonly PhaseManager _phaseManager;
     private readonly List<EchoDefinition> _echoCatalog;
     private readonly Random _rng;
 
-    private int _currentRound;
     private bool _isRunning;
 
     public GameServer(
@@ -36,12 +36,14 @@ public class GameServer
         PlayerSettings playerSettings,
         CombatSettings combatSettings,
         InterventionSettings interventionSettings,
-        ResonanceSettings resonanceSettings)
+        ResonanceSettings resonanceSettings,
+        PhaseSettings phaseSettings)
     {
         _matchManager = new MatchManager();
         _networkManager = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
         _lobbyManager = new LobbyManager(_networkManager, maxPlayers);
         _playerManager = new PlayerManager(playerSettings, resonanceSettings);
+        _phaseManager = new PhaseManager(phaseSettings);
         _matchmakingManager = new MatchmakingManager();
         _rng = new Random(Environment.TickCount);
         _echoCatalog = new List<EchoDefinition>(EchoCatalog.All);
@@ -57,7 +59,8 @@ public class GameServer
     {
         _shopManager.OnShopUpdated += (id, msg) => _networkManager.SendMessage(id, msg);
         _playerManager.OnPlayerStateChanged += OnPlayerStateChanged;
-        _lobbyManager.OnMatchStarted += OnMatchStarted;
+        _lobbyManager.OnMatchStarted += OnLobbyMatchStarted;
+        _phaseManager.OnPhaseChanged += OnPhaseChanged;
         _combatManager.OnAllCombatsComplete += OnAllCombatsComplete;
         _combatManager.OnActionRejected += SendActionRejected;
         _networkManager.OnMessageReceived += HandleMessage;
@@ -83,10 +86,55 @@ public class GameServer
         _networkManager.BroadcastMessage(partial);
     }
 
-    private void OnMatchStarted(List<int> playerIds)
+    private void OnLobbyMatchStarted(List<int> playerIds)
     {
-        _currentRound = 1;
-        StartNextCombatRound(playerIds);
+        _phaseManager.StartGame();
+    }
+
+    private void OnPhaseChanged(GamePhase newPhase, float duration)
+    {
+        Console.WriteLine($"[GameServer] Phase Changed: {newPhase} ({duration}s)");
+
+        // Broadcast phase change to all clients
+        var msg = NetworkMessage.Create(MessageType.PhaseChanged, new PhaseChangedMessage
+        {
+            NewPhase = newPhase,
+            PhaseDurationSecs = duration
+        });
+        _networkManager.BroadcastMessage(msg);
+
+        switch (newPhase)
+        {
+            case GamePhase.Preparation:
+                HandlePreparationStart();
+                break;
+            case GamePhase.Combat:
+                HandleCombatStart();
+                break;
+        }
+    }
+
+    private void HandlePreparationStart()
+    {
+        // For Preparation, ensure shops are refreshed for the new round
+        foreach (int id in _playerManager.GetAllPlayerIds())
+        {
+            _shopManager.GenerateShop(id);
+        }
+    }
+
+    private void HandleCombatStart()
+    {
+        var aliveIds = GetAlivePlayerIds();
+        if (aliveIds.Count < 2)
+        {
+            int winnerId = aliveIds.Count == 1 ? aliveIds[0] : -1;
+            _phaseManager.EndGame();
+            BroadcastGameEnded(winnerId);
+            return;
+        }
+
+        StartNextCombatRound(aliveIds);
     }
 
     private void OnAllCombatsComplete(List<CombatResult> results)
@@ -94,18 +142,8 @@ public class GameServer
         UpdateMatchmakingHistory(results);
         GrantEconomyToAllPlayers();
 
-        var aliveIds = GetAlivePlayerIds();
-
-        if (aliveIds.Count >= 2)
-        {
-            _currentRound++;
-            StartNextCombatRound(aliveIds);
-        }
-        else
-        {
-            int winnerId = aliveIds.Count == 1 ? aliveIds[0] : -1;
-            BroadcastGameEnded(winnerId);
-        }
+        // Move to Reward phase automatically
+        _phaseManager.TriggerRewardPhase();
     }
 
     private void GrantEconomyToAllPlayers()
@@ -149,13 +187,13 @@ public class GameServer
 
         if (states.Count == 0) return;
 
-        var mmResult = _matchmakingManager.ComputePairings(states, _currentRound, _rng);
+        var mmResult = _matchmakingManager.ComputePairings(states, _phaseManager.CurrentRound, _rng);
 
         if (mmResult.Featured != null)
             BroadcastFeaturedMatch(mmResult.Featured);
 
-        int seed = Environment.TickCount ^ _currentRound;
-        _combatManager.StartCombatRound(mmResult.Pairs, _currentRound, seed);
+        int seed = Environment.TickCount ^ _phaseManager.CurrentRound;
+        _combatManager.StartCombatRound(mmResult.Pairs, _phaseManager.CurrentRound, seed);
     }
 
     private void BroadcastFeaturedMatch(FeaturedMatchInfo featured)
@@ -181,6 +219,14 @@ public class GameServer
     {
         _playerManager.InitializePlayer(clientId);
         _shopManager.GenerateShop(clientId);
+
+        // Sync current phase to newly joined client
+        var msg = NetworkMessage.Create(MessageType.PhaseChanged, new PhaseChangedMessage
+        {
+            NewPhase = _phaseManager.CurrentPhase,
+            PhaseDurationSecs = _phaseManager.TimeRemaining
+        });
+        _networkManager.SendMessage(clientId, msg);
     }
 
     private void SendActionRejected(int clientId, string action, string reason)
@@ -195,27 +241,49 @@ public class GameServer
         switch (message.Type)
         {
             case MessageType.RefreshShop:
+                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
+                {
+                    SendActionRejected(clientId, "RefreshShop", "Puoi rinfrescare lo shop solo in fase Preparation");
+                    break;
+                }
                 if (!_shopManager.HandleRefresh(clientId))
                     SendActionRejected(clientId, "RefreshShop", "Oro insufficiente");
                 break;
 
             case MessageType.BuyEcho:
+                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
+                {
+                    SendActionRejected(clientId, "BuyEcho", "Puoi comprare echo solo in fase Preparation");
+                    break;
+                }
                 var buyMsg = message.DeserializePayload<BuyEchoMessage>();
                 if (buyMsg != null && !_shopManager.HandleBuy(clientId, buyMsg.ShopSlot))
                     SendActionRejected(clientId, "BuyEcho", "Oro insufficiente o bench piena");
                 break;
 
             case MessageType.BuyXP:
+                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
+                {
+                    SendActionRejected(clientId, "BuyXP", "Puoi comprare XP solo in fase Preparation");
+                    break;
+                }
                 _playerManager.HandleBuyXP(clientId);
                 break;
 
             case MessageType.SellEcho:
+                // Selling should probably be allowed in many phases, but let's stick to Prep/Reward/Mutation for now if needed.
+                // Or just prep.
                 var sellMsg = message.DeserializePayload<SellEchoMessage>();
                 if (sellMsg != null)
                     _shopManager.HandleSell(clientId, sellMsg.EchoInstanceId);
                 break;
 
             case MessageType.PositionEcho:
+                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
+                {
+                    SendActionRejected(clientId, "PositionEcho", "Puoi posizionare echo solo in fase Preparation");
+                    break;
+                }
                 var posMsg = message.DeserializePayload<PositionEchoMessage>();
                 if (posMsg == null) break;
                 if (posMsg.BoardX < 0 || posMsg.BoardX > 3 ||
@@ -230,6 +298,11 @@ public class GameServer
                 break;
 
             case MessageType.RemoveFromBoard:
+                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
+                {
+                    SendActionRejected(clientId, "RemoveFromBoard", "Puoi rimuovere echo solo in fase Preparation");
+                    break;
+                }
                 var removeMsg = message.DeserializePayload<RemoveFromBoardMessage>();
                 if (removeMsg == null) break;
                 if (!_playerManager.TryMoveToBench(clientId, removeMsg.EchoInstanceId))
@@ -237,6 +310,11 @@ public class GameServer
                 break;
 
             case MessageType.UseIntervention:
+                if (_phaseManager.CurrentPhase != GamePhase.Combat)
+                {
+                    SendActionRejected(clientId, "UseIntervention", "Puoi usare interventi solo in fase Combat");
+                    break;
+                }
                 var intMsg = message.DeserializePayload<UseInterventionMessage>();
                 if (intMsg == null) break;
                 if (!Enum.TryParse<InterventionType>(intMsg.CardId, out var intType))
@@ -268,6 +346,7 @@ public class GameServer
 
             _networkManager.Update();
             _lobbyManager.Update(delta);
+            _phaseManager.Update(delta);
             _combatManager.Update(delta);
 
             await Task.Delay(16);
