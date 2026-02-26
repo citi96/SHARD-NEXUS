@@ -13,13 +13,20 @@ public class EmberbladeEmpowerEffect : BaseStatusEffect
 
     public EmberbladeEmpowerEffect(int duration) : base(duration) { }
 
-    public override void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public override void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         if (_charges > 0)
         {
             _charges--;
-            target.AddEffect(new BurnEffect(180, 30)); // 3s burn
-            if (_charges <= 0) RemainingTicks = 0;
+            target.AddEffect(new BurnEffect(180, 30)); // 3s, 30 dps
+            
+            dispatcher.Dispatch(new CombatEventRecord
+            {
+                Type = "emberblade_proc",
+                Attacker = unit.InstanceId,
+                Target = target.InstanceId,
+                StatusEffectId = "Burn"
+            });
         }
     }
 

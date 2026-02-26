@@ -8,5 +8,5 @@ namespace Server.GameLogic;
 /// </summary>
 public interface IAbilityHandler
 {
-    void Execute(CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events);
+    void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher);
 }

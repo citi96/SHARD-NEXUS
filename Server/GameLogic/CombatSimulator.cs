@@ -50,6 +50,9 @@ public sealed class CombatSimulator
     // ── Incremental state ─────────────────────────
     private int _currentTick = 0;
 
+    private readonly CombatBoard _board;
+    private readonly ICombatEventDispatcher _dispatcher;
+
     public bool IsDone { get; private set; }
     public CombatResult? FinalResult { get; private set; }
 
@@ -84,6 +87,9 @@ public sealed class CombatSimulator
         _units = new List<CombatUnit>();
         LoadUnits(p0, team: 0);
         LoadUnits(p1, team: 1);
+
+        _board = new CombatBoard(_units);
+        _dispatcher = new CombatEventBuffer();
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -109,23 +115,23 @@ public sealed class CombatSimulator
 
         // Apply interventions before advancing ticks
         foreach (var inv in interventions)
-            ApplyIntervention(inv);
+            InterventionProcessor.Process(inv, _units, _intSettings, _dispatcher);
 
-        var tickEvents = new List<CombatEventRecord>();
+        _dispatcher.Clear();
 
         for (int i = 0; i < _settings.SnapshotIntervalTicks; i++)
         {
             _currentTick++;
-            TickOnce(tickEvents);
+            TickOnce();
 
-            if (_currentTick >= _settings.MaxCombatTicks || IsOneSideEliminated())
+            if (_currentTick >= _settings.MaxCombatTicks || _board.IsOneSideEliminated(out _))
             {
                 IsDone = true;
                 break;
             }
         }
 
-        var snapshot = TakeSnapshot(_currentTick, tickEvents);
+        var snapshot = TakeSnapshot(_currentTick, _dispatcher.GetCapturedEvents());
 
         if (IsDone)
             FinalResult = BuildResult();
@@ -157,10 +163,9 @@ public sealed class CombatSimulator
     // Tick logic
     // ──────────────────────────────────────────────────────────────────────────
 
-    private void TickOnce(List<CombatEventRecord> tickEvents)
+    private void TickOnce()
     {
-        var aliveUnits = _units
-            .Where(u => u.IsAlive)
+        var aliveUnits = _board.GetAllAlive()
             .OrderBy(u => u.InstanceId)
             .ToList();
 
@@ -182,7 +187,7 @@ public sealed class CombatSimulator
 
             if (!unit.IsActionable())
             {
-                unit.UpdateEffects(_currentTick, tickEvents);
+                unit.UpdateEffects(_currentTick, _dispatcher);
                 continue;
             }
 
@@ -196,7 +201,7 @@ public sealed class CombatSimulator
 
             if (target == null)
             {
-                unit.UpdateEffects(_currentTick, tickEvents);
+                unit.UpdateEffects(_currentTick, _dispatcher);
                 continue;
             }
 
@@ -210,11 +215,11 @@ public sealed class CombatSimulator
                     bool isCrit = roll < stats.CritChance;
 
                     // DAMAGE PIPELINE
-                    var damageContext = new DamageContext(unit, target, stats.Attack, isCrit, tickEvents);
+                    var damageContext = new DamageContext(unit, target, stats.Attack, isCrit, _dispatcher);
                     foreach (var processor in _damagePipeline)
                         processor.Process(damageContext);
 
-                    tickEvents.Add(new CombatEventRecord
+                    _dispatcher.Dispatch(new CombatEventRecord
                     {
                         Type = isCrit ? "crit" : "attack",
                         Attacker = unit.InstanceId,
@@ -222,7 +227,7 @@ public sealed class CombatSimulator
                         Damage = damageContext.CalculatedDamage,
                     });
 
-                    unit.TriggerOnAttack(target, _units, tickEvents);
+                    unit.TriggerOnAttack(target, _units, _dispatcher);
                     unit.AttackCooldownRemaining = stats.AttackCooldown;
 
                     // Mana regen
@@ -231,7 +236,7 @@ public sealed class CombatSimulator
 
                     if (unit.IsAlive && unit.Mana >= stats.MaxMana && unit.AbilityIds.Length > 0)
                     {
-                        Abilities.AbilityProcessor.Cast(unit.AbilityIds[0], unit, _units, tickEvents);
+                        Abilities.AbilityProcessor.Cast(unit.AbilityIds[0], unit, _units, _dispatcher);
                         unit.Mana = 0;
                     }
                 }
@@ -248,7 +253,7 @@ public sealed class CombatSimulator
                 }
             }
 
-            unit.UpdateEffects(_currentTick, tickEvents);
+            unit.UpdateEffects(_currentTick, _dispatcher);
         }
     }
 
@@ -256,93 +261,7 @@ public sealed class CombatSimulator
     // Intervention application
     // ──────────────────────────────────────────────────────────────────────────
 
-    private void ApplyIntervention(PendingIntervention inv)
-    {
-        int team = inv.Team;
-        var allies = _units.Where(u => u.Team == team && u.IsAlive && !u.IsRetreating).ToList();
-        var target = _units.FirstOrDefault(u => u.InstanceId == inv.TargetId && u.IsAlive);
-
-        switch (inv.Type)
-        {
-            case InterventionType.Reposition:
-                if (target?.Team == team)
-                {
-                    var free = GetAdjacentFreeCells(target);
-                    if (free.Count > 0)
-                    {
-                        target.Col = free[0].col;
-                        target.Row = free[0].row;
-                    }
-                }
-                break;
-
-            case InterventionType.Focus:
-                if (target != null && target.Team != team)
-                {
-                    foreach (var ally in allies)
-                    {
-                        ally.FocusTargetId = inv.TargetId;
-                        ally.FocusTicksLeft = _intSettings.FocusDurationTicks;
-                    }
-                }
-                break;
-
-            case InterventionType.Barrier:
-                if (target?.Team == team)
-                    target.Shield += _intSettings.BarrierShieldHp;
-                break;
-
-            case InterventionType.Accelerate:
-                foreach (var ally in allies)
-                    ally.SpeedBoostTicksLeft = _intSettings.AccelerateDurationTicks;
-                break;
-
-            case InterventionType.TacticalRetreat:
-                if (target?.Team == team && !target.IsRetreating)
-                {
-                    target.IsRetreating = true;
-                    target.RetreatTicksLeft = _intSettings.RetreatDurationTicks;
-                    target.ReturnCol = target.Col;
-                    target.ReturnRow = target.Row;
-                    target.Col = team == 0 ? 0 : CombatWidth - 1;
-                }
-                break;
-        }
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // Ability casting
-    // ──────────────────────────────────────────────────────────────────────────
-
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ──────────────────────────────────────────────────────────────────────────
-
-
-    private bool IsOneSideEliminated()
-    {
-        bool t0 = _units.Any(u => u.Team == 0 && u.IsAlive);
-        bool t1 = _units.Any(u => u.Team == 1 && u.IsAlive);
-        return !t0 || !t1;
-    }
-
-    private List<(int col, int row)> GetAdjacentFreeCells(CombatUnit unit)
-    {
-        var occupied = _units
-            .Where(u => u.IsAlive && !u.IsRetreating)
-            .Select(u => (u.Col, u.Row))
-            .ToHashSet();
-
-        var result = new List<(int, int)>();
-        foreach (var (dc, dr) in new[] { (0, 1), (0, -1), (1, 0), (-1, 0) })
-        {
-            int nc = unit.Col + dc, nr = unit.Row + dr;
-            if (nc >= 0 && nc < CombatWidth && nr >= 0 && nr < 4 && !occupied.Contains((nc, nr)))
-                result.Add((nc, nr));
-        }
-        return result;
-    }
+    // Monolithic helpers removed. Extracted to CombatBoard and InterventionProcessor.
 
     // ──────────────────────────────────────────────────────────────────────────
     // Snapshot & result

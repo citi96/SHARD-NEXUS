@@ -10,7 +10,7 @@ namespace Server.GameLogic.Abilities;
 /// </summary>
 public class EmberbladeAbilityHandler : IAbilityHandler
 {
-    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         caster.AddEffect(new EmberbladeEmpowerEffect(caster.BaseAttackCooldown * 4)); 
     }

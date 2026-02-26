@@ -13,7 +13,7 @@ public class ReflectProcessor : IDamageProcessor
         int damage = context.CalculatedDamage;
         foreach (var effect in context.Target.ActiveEffects)
         {
-            effect.OnBeforeTakeDamage(context.Target, context.Attacker, ref damage, context.Events);
+            effect.OnBeforeTakeDamage(context.Target, context.Attacker, ref damage, context.Dispatcher);
         }
         context.CalculatedDamage = damage;
     }

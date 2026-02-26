@@ -10,27 +10,30 @@ public class BurnEffect : BaseStatusEffect
 {
     public override string Id => "Burn";
     private readonly int _dps;
-    private int _accumulator;
 
     public BurnEffect(int durationTicks, int dps) : base(durationTicks)
     {
         _dps = dps;
     }
 
-    public override void OnTick(CombatUnit unit, int currentTick, List<CombatEventRecord> events)
+    public override void OnTick(CombatUnit unit, int currentTick, ICombatEventDispatcher dispatcher)
     {
-        base.OnTick(unit, currentTick, events);
+        base.OnTick(unit, currentTick, dispatcher);
 
-        _accumulator += _dps;
-        int damage = _accumulator / 60; // Assuming 60Hz
-        if (damage > 0)
+        if (currentTick % 60 == 0) // Once per second
         {
-            _accumulator %= 60;
-            unit.Hp -= damage;
+            unit.Hp -= _dps;
+            dispatcher.Dispatch(new CombatEventRecord
+            {
+                Type = "burn",
+                Target = unit.InstanceId,
+                Damage = _dps
+            });
+
             if (unit.Hp <= 0 && unit.IsAlive)
             {
                 unit.IsAlive = false;
-                events.Add(new CombatEventRecord { Type = "death", Target = unit.InstanceId });
+                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = unit.InstanceId });
             }
         }
     }

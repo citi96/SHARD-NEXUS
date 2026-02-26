@@ -16,7 +16,7 @@ public record DamageContext(
     CombatUnit Target,
     int RawDamage,
     bool IsCrit,
-    List<CombatEventRecord> Events)
+    ICombatEventDispatcher Dispatcher)
 {
     public int CalculatedDamage { get; set; } = RawDamage;
 }

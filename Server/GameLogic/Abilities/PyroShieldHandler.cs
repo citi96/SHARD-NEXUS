@@ -10,8 +10,14 @@ namespace Server.GameLogic.Abilities;
 /// </summary>
 public class PyroShieldHandler : IAbilityHandler
 {
-    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
-        caster.AddEffect(new ReflectEffect(240, 20)); // 4s, 20% reflect
+        caster.Shield += 250;
+        dispatcher.Dispatch(new CombatEventRecord
+        {
+            Type = "ability",
+            Attacker = caster.InstanceId,
+            AbilityId = 4 // PyroShield
+        });
     }
 }

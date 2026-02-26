@@ -6,7 +6,7 @@ namespace Server.GameLogic.Abilities;
 
 public class IceshotHandler : IAbilityHandler
 {
-    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         var target = allUnits
             .Where(u => u.IsAlive && u.Team != caster.Team)
@@ -19,16 +19,21 @@ public class IceshotHandler : IAbilityHandler
             int damage = baseDamage * 150 / 100;
             target.Hp -= damage;
 
-            events.Add(new CombatEventRecord
+            dispatcher.Dispatch(new CombatEventRecord
             {
                 Type = "ability",
                 Attacker = caster.InstanceId,
                 Target = target.InstanceId,
-                Damage = damage,
-                AbilityId = 5
+                Damage = damage
             });
 
             target.AddEffect(new FreezeEffect(90)); // 1.5s freeze
+
+            if (target.Hp <= 0 && target.IsAlive)
+            {
+                target.IsAlive = false;
+                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = target.InstanceId });
+            }
         }
     }
 }

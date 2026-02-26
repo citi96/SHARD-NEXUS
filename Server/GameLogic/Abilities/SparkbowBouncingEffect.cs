@@ -15,7 +15,7 @@ public class SparkbowBouncingEffect : BaseStatusEffect
         _charges = charges;
     }
 
-    public override void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public override void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         if (_charges <= 0) return;
         _charges--;
@@ -27,31 +27,32 @@ public class SparkbowBouncingEffect : BaseStatusEffect
             .Take(2)
             .ToList();
 
+        var stats = unit.GetEffectiveStats();
+        int bounceDamage = stats.Attack * 50 / 100;
+
         foreach (var t in targets)
         {
-            int baseDamage = unit.GetEffectiveStats().Attack;
-            int damage = baseDamage * 50 / 100; // 50% bounce damage
-            t.Hp -= damage;
-
-            events.Add(new CombatEventRecord
+            // Simple damage for bounce (no pipeline for secondary hits for now)
+            t.Hp -= bounceDamage;
+            dispatcher.Dispatch(new CombatEventRecord
             {
-                Type = "chain_attack",
+                Type = "bounce",
                 Attacker = unit.InstanceId,
                 Target = t.InstanceId,
-                Damage = damage
+                Damage = bounceDamage
             });
 
             if (t.Hp <= 0 && t.IsAlive)
             {
                 t.IsAlive = false;
-                events.Add(new CombatEventRecord { Type = "death", Target = t.InstanceId });
+                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = t.InstanceId });
             }
         }
     }
 
-    public override void OnTick(CombatUnit unit, int currentTick, List<CombatEventRecord> events)
+    public override void OnTick(CombatUnit unit, int currentTick, ICombatEventDispatcher dispatcher)
     {
-        base.OnTick(unit, currentTick, events);
+        base.OnTick(unit, currentTick, dispatcher);
         if (_charges <= 0) RemainingTicks = 0;
     }
 }

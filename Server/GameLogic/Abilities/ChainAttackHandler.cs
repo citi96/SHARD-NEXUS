@@ -19,7 +19,7 @@ public class ChainAttackHandler : IAbilityHandler
         _damagePct = damagePct;
     }
 
-    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         var targets = allUnits
             .Where(u => u.IsAlive && u.Team != caster.Team)
@@ -34,7 +34,7 @@ public class ChainAttackHandler : IAbilityHandler
             
             target.Hp -= damage; 
 
-            events.Add(new CombatEventRecord
+            dispatcher.Dispatch(new CombatEventRecord
             {
                 Type = "chain_attack",
                 Attacker = caster.InstanceId,
@@ -45,11 +45,8 @@ public class ChainAttackHandler : IAbilityHandler
             if (target.Hp <= 0 && target.IsAlive)
             {
                 target.IsAlive = false;
-                events.Add(new CombatEventRecord { Type = "death", Target = target.InstanceId });
+                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = target.InstanceId });
             }
         }
     }
-
-    private int ChebyshevDistance(CombatUnit a, CombatUnit b)
-        => Math.Max(Math.Abs(a.Col - b.Col), Math.Abs(a.Row - b.Row));
 }

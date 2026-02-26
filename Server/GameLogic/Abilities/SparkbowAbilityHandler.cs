@@ -9,7 +9,7 @@ namespace Server.GameLogic.Abilities;
 /// </summary>
 public class SparkbowAbilityHandler : IAbilityHandler
 {
-    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         caster.AddEffect(new SparkbowBouncingEffect(300, 5)); // Duration or until charges empty
     }

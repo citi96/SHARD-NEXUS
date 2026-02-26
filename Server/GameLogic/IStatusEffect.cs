@@ -23,7 +23,7 @@ public interface IStatusEffect
 {
     string Id { get; }
     void OnApply(CombatUnit unit);
-    void OnTick(CombatUnit unit, int currentTick, List<Shared.Network.Messages.CombatEventRecord> events);
+    void OnTick(CombatUnit unit, int currentTick, ICombatEventDispatcher dispatcher);
     void OnRemove(CombatUnit unit);
     
     /// <summary>
@@ -35,13 +35,13 @@ public interface IStatusEffect
     /// <summary>
     /// Hook for when the unit performs an attack.
     /// </summary>
-    void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, List<Shared.Network.Messages.CombatEventRecord> events);
+    void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher);
 
     /// <summary>
     /// Called on the target of an attack before damage is deducted from Shield/Hp.
     /// Can modify the damage value.
     /// </summary>
-    void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, List<Shared.Network.Messages.CombatEventRecord> events);
+    void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, ICombatEventDispatcher dispatcher);
 
     bool IsExpired { get; }
     bool PreventsActions { get; }

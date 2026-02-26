@@ -16,7 +16,7 @@ public class HealthProcessor : IDamageProcessor
         if (context.Target.Hp <= 0 && context.Target.IsAlive)
         {
             context.Target.IsAlive = false;
-            context.Events.Add(new CombatEventRecord 
+            context.Dispatcher.Dispatch(new CombatEventRecord 
             { 
                 Type = "death", 
                 Target = context.Target.InstanceId 

@@ -19,18 +19,11 @@ public static class AbilityProcessor
         { 6, new SparkbowAbilityHandler() }, // Sparkbow
     };
 
-    public static void Cast(int abilityId, CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public static void Cast(int abilityId, CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         if (_handlers.TryGetValue(abilityId, out var handler))
         {
-            handler.Execute(caster, allUnits, events);
-            
-            events.Add(new CombatEventRecord
-            {
-                Type = "cast",
-                Attacker = caster.InstanceId,
-                AbilityId = abilityId
-            });
+            handler.Execute(caster, allUnits, dispatcher);
         }
     }
 }

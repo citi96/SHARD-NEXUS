@@ -22,7 +22,7 @@ public abstract class BaseStatusEffect : IStatusEffect
 
     public virtual void OnApply(CombatUnit unit) { }
 
-    public virtual void OnTick(CombatUnit unit, int currentTick, List<CombatEventRecord> events)
+    public virtual void OnTick(CombatUnit unit, int currentTick, ICombatEventDispatcher dispatcher)
     {
         RemainingTicks--;
     }
@@ -31,7 +31,7 @@ public abstract class BaseStatusEffect : IStatusEffect
 
     public virtual void ModifyStats(ref CombatUnitStats stats) { }
 
-    public virtual void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, List<CombatEventRecord> events) { }
+    public virtual void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher) { }
 
-    public virtual void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, List<CombatEventRecord> events) { }
+    public virtual void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, ICombatEventDispatcher dispatcher) { }
 }

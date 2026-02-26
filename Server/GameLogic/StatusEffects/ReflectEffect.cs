@@ -16,7 +16,7 @@ public class ReflectEffect : BaseStatusEffect
         _reflectPct = reflectPct;
     }
 
-    public override void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, List<CombatEventRecord> events)
+    public override void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, ICombatEventDispatcher dispatcher)
     {
         if (damage <= 0 || !attacker.IsAlive) return;
 
@@ -24,18 +24,19 @@ public class ReflectEffect : BaseStatusEffect
         if (reflected > 0)
         {
             attacker.Hp -= reflected;
-            events.Add(new CombatEventRecord
+            dispatcher.Dispatch(new CombatEventRecord
             {
                 Type = "reflect",
                 Attacker = unit.InstanceId,
                 Target = attacker.InstanceId,
                 Damage = reflected,
+                StatusEffectId = "Reflect"
             });
 
             if (attacker.Hp <= 0 && attacker.IsAlive)
             {
                 attacker.IsAlive = false;
-                events.Add(new CombatEventRecord { Type = "death", Target = attacker.InstanceId });
+                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = attacker.InstanceId });
             }
         }
     }

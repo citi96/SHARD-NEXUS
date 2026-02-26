@@ -34,4 +34,5 @@ public class CombatEventRecord
     public int Target { get; set; }
     public int Damage { get; set; }
     public int AbilityId { get; set; }
+    public string StatusEffectId { get; set; } = string.Empty;
 }

@@ -54,12 +54,12 @@ public sealed class CombatUnit
         _activeEffects.Add(effect);
     }
 
-    public void UpdateEffects(int currentTick, List<Shared.Network.Messages.CombatEventRecord> events)
+    public void UpdateEffects(int currentTick, ICombatEventDispatcher dispatcher)
     {
         for (int i = _activeEffects.Count - 1; i >= 0; i--)
         {
             var effect = _activeEffects[i];
-            effect.OnTick(this, currentTick, events);
+            effect.OnTick(this, currentTick, dispatcher);
             if (effect.IsExpired)
             {
                 effect.OnRemove(this);
@@ -68,11 +68,11 @@ public sealed class CombatUnit
         }
     }
 
-    public void TriggerOnAttack(CombatUnit target, List<CombatUnit> allUnits, List<Shared.Network.Messages.CombatEventRecord> events)
+    public void TriggerOnAttack(CombatUnit target, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         foreach (var effect in _activeEffects)
         {
-            effect.OnAttack(this, target, allUnits, events);
+            effect.OnAttack(this, target, allUnits, dispatcher);
         }
     }
 

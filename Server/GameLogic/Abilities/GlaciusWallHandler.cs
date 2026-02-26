@@ -12,7 +12,7 @@ namespace Server.GameLogic.Abilities;
 /// </summary>
 public class GlaciusWallHandler : IAbilityHandler
 {
-    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events)
+    public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
         caster.Shield += 300;
         foreach (var enemy in allUnits.Where(u => u.IsAlive && u.Team != caster.Team))
