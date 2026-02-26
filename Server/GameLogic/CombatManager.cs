@@ -27,6 +27,7 @@ public sealed class CombatManager
     private readonly IReadOnlyList<EchoDefinition> _catalog;
     private readonly CombatSettings _settings;
     private readonly InterventionSettings _intSettings;
+    private readonly ResonanceSettings _resSettings;
 
     // ── Active combat state ───────────────────────────────────────────────────
 
@@ -48,13 +49,15 @@ public sealed class CombatManager
         ServerNetworkManager network,
         IReadOnlyList<EchoDefinition> catalog,
         CombatSettings settings,
-        InterventionSettings intSettings)
+        InterventionSettings intSettings,
+        ResonanceSettings resSettings)
     {
         _playerManager = playerManager;
         _network = network;
         _catalog = catalog;
         _settings = settings;
         _intSettings = intSettings;
+        _resSettings = resSettings;
     }
 
     // ── Public API ─────────────────────────────────────────────────────────────
@@ -117,7 +120,7 @@ public sealed class CombatManager
                                   $"{(isGhost ? "Ghost" : pair.P1Id.ToString())} (seed={pairSeed})");
 
                 simulator = new CombatSimulator(
-                    p0State, p1State, _catalog, _settings, _intSettings, pairSeed, round);
+                    p0State, p1State, _catalog, _settings, _intSettings, _resSettings, pairSeed, round);
             }
             else
             {

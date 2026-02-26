@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using Godot;
 using Shared.Models.Enums;
 using Shared.Network.Messages;
@@ -19,24 +20,24 @@ namespace Client.Scripts.UI;
 /// </summary>
 public partial class InterventionPanel : Control
 {
-    public const int ButtonW   = 80;
-    public const int ButtonH   = 48;
+    public const int ButtonW = 80;
+    public const int ButtonH = 48;
     public const int ButtonGap = 6;
 
     [ExportGroup("Colors")]
-    [Export] public Color ButtonBg       = new(0.25f, 0.35f, 0.55f, 1.00f);
-    [Export] public Color ButtonBorder   = new(0.50f, 0.65f, 0.90f, 1.00f);
-    [Export] public Color ButtonText     = new(1.00f, 1.00f, 1.00f, 1.00f);
-    [Export] public Color CostText       = new(1.00f, 0.85f, 0.20f, 1.00f);
-    [Export] public Color CooldownBg     = new(0.20f, 0.20f, 0.20f, 1.00f);
+    [Export] public Color ButtonBg = new(0.25f, 0.35f, 0.55f, 1.00f);
+    [Export] public Color ButtonBorder = new(0.50f, 0.65f, 0.90f, 1.00f);
+    [Export] public Color ButtonText = new(1.00f, 1.00f, 1.00f, 1.00f);
+    [Export] public Color CostText = new(1.00f, 0.85f, 0.20f, 1.00f);
+    [Export] public Color CooldownBg = new(0.20f, 0.20f, 0.20f, 1.00f);
     [Export] public Color CooldownBorder = new(0.35f, 0.35f, 0.35f, 1.00f);
-    [Export] public Color CooldownText   = new(0.50f, 0.50f, 0.50f, 1.00f);
-    [Export] public Color CooldownTimer  = new(1.00f, 0.80f, 0.10f, 1.00f);
-    [Export] public Color StatusColor    = new(1.00f, 0.30f, 0.30f, 1.00f);
-    [Export] public Color EnergyBarFg    = new(0.20f, 0.80f, 1.00f, 1.00f);
-    [Export] public Color EnergyBarBg    = new(0.05f, 0.10f, 0.20f, 1.00f);
-    [Export] public Color PendingBorder  = new(1.00f, 1.00f, 0.20f, 1.00f);
-    [Export] public Color DisabledBg     = new(0.12f, 0.12f, 0.12f, 1.00f);
+    [Export] public Color CooldownText = new(0.50f, 0.50f, 0.50f, 1.00f);
+    [Export] public Color CooldownTimer = new(1.00f, 0.80f, 0.10f, 1.00f);
+    [Export] public Color StatusColor = new(1.00f, 0.30f, 0.30f, 1.00f);
+    [Export] public Color EnergyBarFg = new(0.20f, 0.80f, 1.00f, 1.00f);
+    [Export] public Color EnergyBarBg = new(0.05f, 0.10f, 0.20f, 1.00f);
+    [Export] public Color PendingBorder = new(1.00f, 1.00f, 0.20f, 1.00f);
+    [Export] public Color DisabledBg = new(0.12f, 0.12f, 0.12f, 1.00f);
 
     // Mirrors InterventionSettings order: Reposition, Focus, Barrier, Accelerate, TacticalRetreat
     public static readonly InterventionType[] ButtonTypes =
@@ -57,20 +58,20 @@ public partial class InterventionPanel : Control
     // Mirrors InterventionSettings.CooldownSeconds
     private static readonly float[] CooldownSeconds = { 8f, 12f, 15f, 20f, 25f };
 
-    private GameClient?          _gameClient;
-    private ClientStateManager?  _sm;
-    private int                  _energy       = 0;
-    private int                  _maxEnergy    = 15;
-    private int                  _pendingIndex = -1;
-    private readonly float[]     _cooldowns    = new float[5];
-    private float                _statusTimer  = 0f;
-    private string               _statusText   = string.Empty;
+    private GameClient? _gameClient;
+    private ClientStateManager? _sm;
+    private int _energy = 0;
+    private int _maxEnergy = 15;
+    private int _pendingIndex = -1;
+    private readonly float[] _cooldowns = new float[5];
+    private float _statusTimer = 0f;
+    private string _statusText = string.Empty;
 
     [Signal] public delegate void InterventionRequestedEventHandler(int typeIndex);
 
     public override void _Ready()
     {
-        int count  = ButtonTypes.Length;
+        int count = ButtonTypes.Length;
         float totalW = count * ButtonW + (count - 1) * ButtonGap;
         float totalH = ButtonH + 8 + 16;
         CustomMinimumSize = new Vector2(totalW, totalH);
@@ -79,10 +80,10 @@ public partial class InterventionPanel : Control
         _gameClient = GetParent<GameClient>();
         _sm = _gameClient.StateManager;
 
-        _sm.OnCombatStarted         += (_, _) => { Visible = true; QueueRedraw(); };
-        _sm.OnCombatEnded           += OnCombatEnded;
-        _sm.OnActionRejected        += OnActionRejected;
-        _sm.OnEnergyChanged         += OnEnergyChanged;
+        _sm.OnCombatStarted += (_, _) => { Visible = true; QueueRedraw(); };
+        _sm.OnCombatEnded += OnCombatEnded;
+        _sm.OnActionRejected += OnActionRejected;
+        _sm.OnEnergyChanged += OnEnergyChanged;
         _sm.OnInterventionActivated += OnInterventionActivated;
 
         Visible = false;
@@ -91,9 +92,9 @@ public partial class InterventionPanel : Control
     public override void _ExitTree()
     {
         if (_sm == null) return;
-        _sm.OnCombatEnded           -= OnCombatEnded;
-        _sm.OnActionRejected        -= OnActionRejected;
-        _sm.OnEnergyChanged         -= OnEnergyChanged;
+        _sm.OnCombatEnded -= OnCombatEnded;
+        _sm.OnActionRejected -= OnActionRejected;
+        _sm.OnEnergyChanged -= OnEnergyChanged;
         _sm.OnInterventionActivated -= OnInterventionActivated;
     }
 
@@ -140,9 +141,9 @@ public partial class InterventionPanel : Control
         for (int i = 0; i < ButtonTypes.Length; i++)
         {
             bool onCooldown = _cooldowns[i] > 0;
-            bool canAfford  = _energy >= EnergyCosts[i];
-            bool usable     = !onCooldown && canAfford;
-            bool pending    = _pendingIndex == i;
+            bool canAfford = _energy >= EnergyCosts[i];
+            bool usable = !onCooldown && canAfford;
+            bool pending = _pendingIndex == i;
 
             var rect = ButtonRect(i);
 
@@ -217,7 +218,7 @@ public partial class InterventionPanel : Control
 
     private void OnCombatEnded(int _, int __)
     {
-        Visible       = false;
+        Visible = false;
         _pendingIndex = -1;
         Array.Clear(_cooldowns, 0, _cooldowns.Length);
         QueueRedraw();
@@ -225,7 +226,7 @@ public partial class InterventionPanel : Control
 
     private void OnEnergyChanged(int energy, int maxEnergy)
     {
-        _energy    = energy;
+        _energy = energy;
         _maxEnergy = maxEnergy;
         QueueRedraw();
     }
@@ -249,8 +250,8 @@ public partial class InterventionPanel : Control
     private void OnActionRejected(ActionRejectedMessage msg)
     {
         if (msg.Action != "UseIntervention") return;
-        _statusText   = msg.Reason;
-        _statusTimer  = 3f;
+        _statusText = msg.Reason;
+        _statusTimer = 3f;
         _pendingIndex = -1;
         QueueRedraw();
     }

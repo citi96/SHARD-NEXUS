@@ -35,19 +35,20 @@ public class GameServer
         ShopSettings shopSettings,
         PlayerSettings playerSettings,
         CombatSettings combatSettings,
-        InterventionSettings interventionSettings)
+        InterventionSettings interventionSettings,
+        ResonanceSettings resonanceSettings)
     {
         _matchManager = new MatchManager();
         _networkManager = new ServerNetworkManager(maxPlayers, port, ackTimeoutMs, ackMaxRetries);
         _lobbyManager = new LobbyManager(_networkManager, maxPlayers);
-        _playerManager = new PlayerManager(playerSettings);
+        _playerManager = new PlayerManager(playerSettings, resonanceSettings);
         _matchmakingManager = new MatchmakingManager();
         _rng = new Random(Environment.TickCount);
         _echoCatalog = new List<EchoDefinition>(EchoCatalog.All);
 
         _echoPoolManager = new EchoPoolManager(echoPoolSettings, _echoCatalog);
         _shopManager = new ShopManager(shopSettings, _echoPoolManager, _playerManager, _echoCatalog);
-        _combatManager = new CombatManager(_playerManager, _networkManager, _echoCatalog, combatSettings, interventionSettings);
+        _combatManager = new CombatManager(_playerManager, _networkManager, _echoCatalog, combatSettings, interventionSettings, resonanceSettings);
 
         WireEvents();
     }

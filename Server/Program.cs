@@ -21,9 +21,10 @@ class Program
         var playerSettings    = config.GetSection("PlayerSettings").Get<Server.Configuration.PlayerSettings>()      ?? new Server.Configuration.PlayerSettings();
         var combatSettings       = config.GetSection("CombatSettings").Get<Server.Configuration.CombatSettings>()             ?? new Server.Configuration.CombatSettings();
         var interventionSettings = config.GetSection("InterventionSettings").Get<Server.Configuration.InterventionSettings>() ?? new Server.Configuration.InterventionSettings();
+        var resonanceSettings    = config.GetSection("ResonanceSettings").Get<Server.Configuration.ResonanceSettings>()     ?? new Server.Configuration.ResonanceSettings();
 
         Console.WriteLine($"Avvio del server SHARD NEXUS (Port: {port}, Max Players: {maxPlayers})...");
-        GameServer server = new GameServer(maxPlayers, port, ackTimeoutMs, ackMaxRetries, echoPoolSettings, shopSettings, playerSettings, combatSettings, interventionSettings);
+        GameServer server = new GameServer(maxPlayers, port, ackTimeoutMs, ackMaxRetries, echoPoolSettings, shopSettings, playerSettings, combatSettings, interventionSettings, resonanceSettings);
 
         // Graceful shutdown via Ctrl+C
         Console.CancelKeyPress += (_, e) =>

@@ -14,5 +14,6 @@ public readonly record struct PlayerState(
     int[] BenchEchoInstanceIds,
     int[] MutationIds,
     int WinStreak,
-    int LossStreak
+    int LossStreak,
+    ResonanceBonus[] ActiveResonances
 );

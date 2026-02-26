@@ -33,6 +33,7 @@ public sealed class CombatSimulator
 
     private readonly CombatSettings       _settings;
     private readonly InterventionSettings _intSettings;
+    private readonly ResonanceSettings    _resSettings;
     private readonly Dictionary<int, EchoDefinition> _catalog;
     private readonly List<CombatUnit>     _units;
     private readonly int  _p0Id;
@@ -51,11 +52,13 @@ public sealed class CombatSimulator
         IEnumerable<EchoDefinition> catalog,
         CombatSettings settings,
         InterventionSettings intSettings,
+        ResonanceSettings resSettings,
         int seed,
         int round)
     {
         _settings    = settings;
         _intSettings = intSettings;
+        _resSettings = resSettings;
         _catalog     = catalog.ToDictionary(d => d.Id);
         _p0Id        = p0.PlayerId;
         _p1Id        = p1.PlayerId;
@@ -119,6 +122,8 @@ public sealed class CombatSimulator
 
     private void LoadUnits(PlayerState state, int team)
     {
+        var resBonuses = ComputeStatBonuses(state.ActiveResonances);
+
         for (int idx = 0; idx < state.BoardEchoInstanceIds.Length; idx++)
         {
             int instanceId = state.BoardEchoInstanceIds[idx];
@@ -130,13 +135,22 @@ public sealed class CombatSimulator
             int multiplier = 100;
 
             int hp      = def.BaseHealth  * multiplier / 100;
+            hp += hp * resBonuses.HpPct / 100;
+
             int attack  = def.BaseAttack  * multiplier / 100;
+            attack += attack * resBonuses.AtkPct / 100;
+
             int defense = def.BaseDefense * multiplier / 100;
+            defense += defense * resBonuses.DefPct / 100;
+
             int maxMana = def.BaseMana    * multiplier / 100;
 
             string className = def.Class.ToString();
             int cooldown = _settings.AttackCooldownByClass.TryGetValue(className, out int cd) ? cd : 30;
-            int range    = _settings.AttackRangeByClass.TryGetValue(className, out int r)    ? r  : 1;
+            if (resBonuses.AsPct > 0)
+                cooldown = cooldown * 100 / (100 + resBonuses.AsPct);
+
+            int range = _settings.AttackRangeByClass.TryGetValue(className, out int r) ? r : 1;
 
             int boardCol  = idx % BoardCols;
             int boardRow  = idx / BoardCols;
@@ -161,8 +175,32 @@ public sealed class CombatSimulator
                 AttackCooldown          = cooldown,
                 AttackCooldownRemaining = 0,
                 IsAlive                 = true,
+                Shield                  = resBonuses.ShieldFlat,
             });
         }
+    }
+
+    private (int AtkPct, int DefPct, int HpPct, int AsPct, int ShieldFlat) ComputeStatBonuses(
+        ResonanceBonus[] resonances)
+    {
+        int atk = 0, def = 0, hp = 0, aspd = 0, shield = 0;
+        if (resonances == null) return (atk, def, hp, aspd, shield);
+
+        foreach (var r in resonances)
+        {
+            for (int tier = 1; tier <= r.Tier; tier++)
+            {
+                string key = $"{r.ResonanceType}_{tier}";
+                if (!_resSettings.Bonuses.TryGetValue(key, out var bonusDict)) continue;
+                atk    += bonusDict.GetValueOrDefault("AtkPct");
+                def    += bonusDict.GetValueOrDefault("DefPct");
+                hp     += bonusDict.GetValueOrDefault("HpPct");
+                aspd   += bonusDict.GetValueOrDefault("AsPct");
+                shield += bonusDict.GetValueOrDefault("ShieldFlat");
+            }
+        }
+
+        return (atk, def, hp, aspd, shield);
     }
 
     // ──────────────────────────────────────────────────────────────────────────

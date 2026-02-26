@@ -13,14 +13,16 @@ namespace Server.GameLogic;
 public class PlayerManager
 {
     private readonly PlayerSettings _settings;
+    private readonly ResonanceSettings _resonanceSettings;
     private readonly ConcurrentDictionary<int, PlayerState> _players = new();
 
     public event Action<int, PlayerState>? OnPlayerStateChanged;
     public event Action<int>? OnPlayerEliminated;
 
-    public PlayerManager(PlayerSettings settings)
+    public PlayerManager(PlayerSettings settings, ResonanceSettings resonanceSettings)
     {
         _settings = settings;
+        _resonanceSettings = resonanceSettings;
     }
 
     public void InitializePlayer(int playerId)
@@ -35,7 +37,8 @@ public class PlayerManager
             BenchEchoInstanceIds: new int[_settings.BenchSlots],
             MutationIds: Array.Empty<int>(),
             WinStreak: 0,
-            LossStreak: 0
+            LossStreak: 0,
+            ActiveResonances: Array.Empty<ResonanceBonus>()
         );
 
         for (int i = 0; i < _settings.BoardSlots; i++) newState.BoardEchoInstanceIds[i] = -1;
@@ -240,7 +243,13 @@ public class PlayerManager
             if (benchSlot != -1) newBench[benchSlot] = -1;
             if (boardSlot != -1) newBoard[boardSlot] = -1;
 
-            var newState = state with { BenchEchoInstanceIds = newBench, BoardEchoInstanceIds = newBoard };
+            var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
+            var newState = state with
+            {
+                BenchEchoInstanceIds = newBench,
+                BoardEchoInstanceIds = newBoard,
+                ActiveResonances = resonances,
+            };
             if (_players.TryUpdate(playerId, newState, state))
             {
                 OnPlayerStateChanged?.Invoke(playerId, newState);
@@ -300,7 +309,13 @@ public class PlayerManager
             newBoard[boardSlot] = -1;
             newBench[emptyBench] = echoInstanceId;
 
-            var newState = state with { BoardEchoInstanceIds = newBoard, BenchEchoInstanceIds = newBench };
+            var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
+            var newState = state with
+            {
+                BoardEchoInstanceIds = newBoard,
+                BenchEchoInstanceIds = newBench,
+                ActiveResonances = resonances,
+            };
             if (_players.TryUpdate(playerId, newState, state))
             {
                 OnPlayerStateChanged?.Invoke(playerId, newState);
@@ -334,7 +349,13 @@ public class PlayerManager
             newBench[benchSlot] = -1;
             newBoard[boardIndex] = echoInstanceId;
 
-            var newState = state with { BenchEchoInstanceIds = newBench, BoardEchoInstanceIds = newBoard };
+            var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
+            var newState = state with
+            {
+                BenchEchoInstanceIds = newBench,
+                BoardEchoInstanceIds = newBoard,
+                ActiveResonances = resonances,
+            };
             if (_players.TryUpdate(playerId, newState, state))
             {
                 OnPlayerStateChanged?.Invoke(playerId, newState);
