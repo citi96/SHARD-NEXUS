@@ -42,7 +42,9 @@ public sealed class CombatUnit
     public int ReturnCol { get; set; }
     public int ReturnRow { get; set; }
 
-    // Modular Effects
+    public ITargetingStrategy TargetingStrategy { get; set; } = new NearestEnemyStrategy();
+
+    // Stats
     private readonly List<IStatusEffect> _activeEffects = new();
     public IReadOnlyList<IStatusEffect> ActiveEffects => _activeEffects;
 
@@ -90,13 +92,6 @@ public sealed class CombatUnit
         return stats;
     }
 
-    public void ApplyDamageModifier(ref int damage, List<Shared.Network.Messages.CombatEventRecord> events)
-    {
-        foreach (var effect in _activeEffects)
-        {
-            effect.OnBeforeTakeDamage(this, ref damage, events);
-        }
-    }
 
     public bool IsActionable()
     {

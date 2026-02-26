@@ -38,9 +38,10 @@ public interface IStatusEffect
     void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, List<Shared.Network.Messages.CombatEventRecord> events);
 
     /// <summary>
-    /// Hook for damage modification (e.g. Damage Reflection, Damage Reduction).
+    /// Called on the target of an attack before damage is deducted from Shield/Hp.
+    /// Can modify the damage value.
     /// </summary>
-    void OnBeforeTakeDamage(CombatUnit unit, ref int damage, List<Shared.Network.Messages.CombatEventRecord> events);
+    void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, List<Shared.Network.Messages.CombatEventRecord> events);
 
     bool IsExpired { get; }
     bool PreventsActions { get; }

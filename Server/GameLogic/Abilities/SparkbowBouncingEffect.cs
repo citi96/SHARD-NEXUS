@@ -23,7 +23,7 @@ public class SparkbowBouncingEffect : BaseStatusEffect
         // Find 2 additional targets (total 3 including original)
         var targets = allUnits
             .Where(u => u.IsAlive && u.Team != unit.Team && u.InstanceId != target.InstanceId)
-            .OrderBy(u => Math.Max(Math.Abs(unit.Col - u.Col), Math.Abs(unit.Row - u.Row)))
+            .OrderBy(u => GridUtils.ChebyshevDistance(unit, u))
             .Take(2)
             .ToList();
 

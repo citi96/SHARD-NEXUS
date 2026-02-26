@@ -17,13 +17,10 @@ public class GlaciusWallHandler : IAbilityHandler
         caster.Shield += 300;
         foreach (var enemy in allUnits.Where(u => u.IsAlive && u.Team != caster.Team))
         {
-            if (ChebyshevDistance(caster, enemy) <= 1)
+            if (GridUtils.ChebyshevDistance(caster, enemy) <= 1)
             {
                 enemy.AddEffect(new SlowEffect(180, 40)); // 3s, 40% slow
             }
         }
     }
-
-    private int ChebyshevDistance(CombatUnit a, CombatUnit b)
-        => Math.Max(Math.Abs(a.Col - b.Col), Math.Abs(a.Row - b.Row));
 }

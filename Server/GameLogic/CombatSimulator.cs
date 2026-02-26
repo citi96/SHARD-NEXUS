@@ -44,6 +44,8 @@ public sealed class CombatSimulator
     private readonly int _p1Id;
     private readonly int _round;
     private readonly Random _rng;
+    private readonly CombatUnitFactory _unitFactory;
+    private readonly List<IDamageProcessor> _damagePipeline;
 
     // ── Incremental state ─────────────────────────
     private int _currentTick = 0;
@@ -69,6 +71,15 @@ public sealed class CombatSimulator
         _p1Id = p1.PlayerId;
         _round = round;
         _rng = new Random(seed);
+        _unitFactory = new CombatUnitFactory(catalog, resSettings);
+        _damagePipeline = new List<IDamageProcessor>
+        {
+            new DefenseProcessor(),
+            new CriticalStrikeProcessor(),
+            new ReflectProcessor(),
+            new ShieldProcessor(),
+            new HealthProcessor()
+        };
 
         _units = new List<CombatUnit>();
         LoadUnits(p0, team: 0);
@@ -128,94 +139,19 @@ public sealed class CombatSimulator
 
     private void LoadUnits(PlayerState state, int team)
     {
-        var resBonuses = ComputeStatBonuses(state.ActiveResonances);
-
         for (int idx = 0; idx < state.BoardEchoInstanceIds.Length; idx++)
         {
             int instanceId = state.BoardEchoInstanceIds[idx];
             if (instanceId == -1) continue;
 
-            int definitionId = instanceId / 1000;
-            if (!_catalog.TryGetValue(definitionId, out var def)) continue;
-
-            int multiplier = 100;
-
-            int hp = def.BaseHealth * multiplier / 100;
-            hp += hp * resBonuses.HpPct / 100;
-
-            int attack = def.BaseAttack * multiplier / 100;
-            attack += attack * resBonuses.AtkPct / 100;
-
-            int defense = def.BaseDefense * multiplier / 100;
-            defense += defense * resBonuses.DefPct / 100;
-
-            int mr = def.BaseMR * multiplier / 100;
-
-            int maxMana = def.BaseMana * multiplier / 100;
-
-            string className = def.Class.ToString();
-
-            // Calculate cooldown from AttackSpeed: cd = ticks_per_sec (60) / attack_speed
-            int cooldown = (int)(60f / def.BaseAttackSpeed);
-            if (resBonuses.AsPct > 0)
-                cooldown = cooldown * 100 / (100 + resBonuses.AsPct);
-
-            int range = def.BaseAttackRange;
-
             int boardCol = idx % BoardCols;
             int boardRow = idx / BoardCols;
-            int combatCol = team == 0
-                ? boardCol
-                : CombatWidth - 1 - boardCol;
+            int combatCol = team == 0 ? boardCol : CombatWidth - 1 - boardCol;
 
-            _units.Add(new CombatUnit
-            {
-                InstanceId = instanceId,
-                DefinitionId = definitionId,
-                Team = team,
-                Col = combatCol,
-                Row = boardRow,
-                Hp = hp,
-                BaseMaxHp = hp,
-                Mana = 0,
-                BaseMaxMana = maxMana,
-                BaseAttack = attack,
-                BaseDefense = defense,
-                BaseMr = mr,
-                BaseAttackRange = range,
-                BaseCritChance = def.BaseCritChance,
-                BaseCritMultiplier = 150,
-                BaseAttackCooldown = cooldown,
-                AttackCooldownRemaining = 0,
-                IsAlive = true,
-                Shield = resBonuses.ShieldFlat,
-                AbilityIds = def.AbilityIds,
-            });
+            _units.Add(_unitFactory.Create(instanceId, team, combatCol, boardRow, state.ActiveResonances));
         }
     }
 
-    private (int AtkPct, int DefPct, int HpPct, int AsPct, int ShieldFlat) ComputeStatBonuses(
-        ResonanceBonus[] resonances)
-    {
-        int atk = 0, def = 0, hp = 0, aspd = 0, shield = 0;
-        if (resonances == null) return (atk, def, hp, aspd, shield);
-
-        foreach (var r in resonances)
-        {
-            for (int tier = 1; tier <= r.Tier; tier++)
-            {
-                string key = $"{r.ResonanceType}_{tier}";
-                if (!_resSettings.Bonuses.TryGetValue(key, out var bonusDict)) continue;
-                atk += bonusDict.GetValueOrDefault("AtkPct");
-                def += bonusDict.GetValueOrDefault("DefPct");
-                hp += bonusDict.GetValueOrDefault("HpPct");
-                aspd += bonusDict.GetValueOrDefault("AsPct");
-                shield += bonusDict.GetValueOrDefault("ShieldFlat");
-            }
-        }
-
-        return (atk, def, hp, aspd, shield);
-    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // Tick logic
@@ -232,7 +168,6 @@ public sealed class CombatSimulator
         {
             if (!unit.IsAlive) continue;
 
-            // Retreating units: count down and restore position when done
             if (unit.IsRetreating)
             {
                 unit.RetreatTicksLeft--;
@@ -251,15 +186,13 @@ public sealed class CombatSimulator
                 continue;
             }
 
-            // Normal cooldown decrement; speed boost adds a second decrement (2× speed)
             unit.AttackCooldownRemaining = Math.Max(0, unit.AttackCooldownRemaining - 1);
             if (unit.SpeedBoostTicksLeft > 0)
                 unit.AttackCooldownRemaining = Math.Max(0, unit.AttackCooldownRemaining - 1);
 
-            // Find target: Focus override, else nearest enemy
             var target = (unit.FocusTicksLeft > 0)
                 ? _units.FirstOrDefault(u => u.InstanceId == unit.FocusTargetId && u.IsAlive && !u.IsRetreating)
-                : FindNearestEnemy(unit);
+                : unit.TargetingStrategy.SelectTarget(unit, _units);
 
             if (target == null)
             {
@@ -269,93 +202,49 @@ public sealed class CombatSimulator
 
             var stats = unit.GetEffectiveStats();
 
-            if (ChebyshevDistance(unit, target) <= stats.AttackRange)
+            if (GridUtils.ChebyshevDistance(unit, target) <= stats.AttackRange)
             {
                 if (unit.AttackCooldownRemaining == 0)
                 {
-                    int baseDamage = stats.Attack;
-
-                    // Empowered effects (like Emberblade) are now handled via StatusEffects hooks 
-                    // or specialized events if needed. For now, we'll keep the physical attack roll.
-
-                    int rawDamage = Math.Max(1, baseDamage - target.BaseDefense);
-
-                    // Critical Strike Roll
                     float roll = (float)_rng.NextDouble();
                     bool isCrit = roll < stats.CritChance;
-                    if (isCrit)
-                    {
-                        rawDamage = rawDamage * stats.CritMultiplier / 100;
-                    }
 
-                    // Apply damage modifiers (e.g. Damage Reflection)
-                    target.ApplyDamageModifier(ref rawDamage, tickEvents);
-
-                    // Shield absorbs damage first
-                    int absorbed = Math.Min(target.Shield, rawDamage);
-                    target.Shield -= absorbed;
-                    int damage = rawDamage - absorbed;
-
-                    if (damage > 0)
-                        target.Hp -= damage;
+                    // DAMAGE PIPELINE
+                    var damageContext = new DamageContext(unit, target, stats.Attack, isCrit, tickEvents);
+                    foreach (var processor in _damagePipeline)
+                        processor.Process(damageContext);
 
                     tickEvents.Add(new CombatEventRecord
                     {
                         Type = isCrit ? "crit" : "attack",
                         Attacker = unit.InstanceId,
                         Target = target.InstanceId,
-                        Damage = rawDamage,
+                        Damage = damageContext.CalculatedDamage,
                     });
 
-                    // TRIGGER ATTACK HOOKS (Modular)
                     unit.TriggerOnAttack(target, _units, tickEvents);
-
                     unit.AttackCooldownRemaining = stats.AttackCooldown;
-
-                    // DAMAGE REFLECTION (Modular)
-                    var reflectEffect = target.ActiveEffects.OfType<ReflectEffect>().FirstOrDefault();
-                    if (reflectEffect != null && unit.IsAlive)
-                    {
-                        int reflected = rawDamage * reflectEffect.ReflectPct / 100;
-                        if (reflected > 0)
-                        {
-                            unit.Hp -= reflected;
-                            tickEvents.Add(new CombatEventRecord
-                            {
-                                Type = "reflect",
-                                Attacker = target.InstanceId,
-                                Target = unit.InstanceId,
-                                Damage = reflected,
-                            });
-                        }
-                    }
 
                     // Mana regen
                     unit.Mana = Math.Min(stats.MaxMana, unit.Mana + ManaPerAttack);
                     target.Mana = Math.Min(stats.MaxMana, target.Mana + ManaPerHit);
 
-                    // Check ability cast
                     if (unit.IsAlive && unit.Mana >= stats.MaxMana && unit.AbilityIds.Length > 0)
                     {
                         Abilities.AbilityProcessor.Cast(unit.AbilityIds[0], unit, _units, tickEvents);
                         unit.Mana = 0;
                     }
-
-                    if (target.Hp <= 0 && target.IsAlive)
-                    {
-                        target.IsAlive = false;
-                        tickEvents.Add(new CombatEventRecord { Type = "death", Target = target.InstanceId });
-                    }
                 }
             }
             else
             {
-                // Movement with modular speed support
                 unit.MoveAccumulator += stats.MoveSpeed;
                 if (unit.MoveAccumulator >= 100)
                 {
                     unit.MoveAccumulator -= 100;
-                    MoveToward(unit, target);
+                    var (dc, dr) = GridUtils.GetStepToward(unit, target);
+                    unit.Col += dc;
+                    unit.Row += dr;
                 }
             }
 
@@ -430,31 +319,6 @@ public sealed class CombatSimulator
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────
 
-    private CombatUnit? FindNearestEnemy(CombatUnit unit)
-    {
-        CombatUnit? nearest = null;
-        int minDist = int.MaxValue;
-
-        foreach (var candidate in _units)
-        {
-            if (!candidate.IsAlive || candidate.Team == unit.Team || candidate.IsRetreating) continue;
-            int dist = ChebyshevDistance(unit, candidate);
-            if (dist < minDist) { minDist = dist; nearest = candidate; }
-        }
-
-        return nearest;
-    }
-
-    private static int ChebyshevDistance(CombatUnit a, CombatUnit b)
-        => Math.Max(Math.Abs(a.Col - b.Col), Math.Abs(a.Row - b.Row));
-
-    private static void MoveToward(CombatUnit unit, CombatUnit target)
-    {
-        int dCol = Math.Sign(target.Col - unit.Col);
-        int dRow = Math.Sign(target.Row - unit.Row);
-        if (dCol != 0) unit.Col += dCol;
-        else if (dRow != 0) unit.Row += dRow;
-    }
 
     private bool IsOneSideEliminated()
     {

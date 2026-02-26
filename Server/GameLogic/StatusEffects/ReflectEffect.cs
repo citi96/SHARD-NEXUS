@@ -16,11 +16,28 @@ public class ReflectEffect : BaseStatusEffect
         _reflectPct = reflectPct;
     }
 
-    public override void OnBeforeTakeDamage(CombatUnit unit, ref int damage, List<CombatEventRecord> events)
+    public override void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, List<CombatEventRecord> events)
     {
-        // Reflection is complex because we need the original attacker context.
-        // We can handle this by adding a "Reflection" event in the simulator 
-        // that checks for this effect's presence.
+        if (damage <= 0 || !attacker.IsAlive) return;
+
+        int reflected = damage * _reflectPct / 100;
+        if (reflected > 0)
+        {
+            attacker.Hp -= reflected;
+            events.Add(new CombatEventRecord
+            {
+                Type = "reflect",
+                Attacker = unit.InstanceId,
+                Target = attacker.InstanceId,
+                Damage = reflected,
+            });
+
+            if (attacker.Hp <= 0 && attacker.IsAlive)
+            {
+                attacker.IsAlive = false;
+                events.Add(new CombatEventRecord { Type = "death", Target = attacker.InstanceId });
+            }
+        }
     }
 
     public int ReflectPct => _reflectPct;

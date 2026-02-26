@@ -23,7 +23,7 @@ public class ChainAttackHandler : IAbilityHandler
     {
         var targets = allUnits
             .Where(u => u.IsAlive && u.Team != caster.Team)
-            .OrderBy(u => ChebyshevDistance(caster, u))
+            .OrderBy(u => GridUtils.ChebyshevDistance(caster, u))
             .Take(_targetsCount)
             .ToList();
 

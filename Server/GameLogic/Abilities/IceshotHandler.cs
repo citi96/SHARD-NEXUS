@@ -8,10 +8,9 @@ public class IceshotHandler : IAbilityHandler
 {
     public void Execute(CombatUnit caster, List<CombatUnit> allUnits, List<CombatEventRecord> events)
     {
-        // Find nearest enemy
         var target = allUnits
             .Where(u => u.IsAlive && u.Team != caster.Team)
-            .OrderBy(u => Math.Max(Math.Abs(caster.Col - u.Col), Math.Abs(caster.Row - u.Row)))
+            .OrderBy(u => GridUtils.ChebyshevDistance(caster, u))
             .FirstOrDefault();
 
         if (target != null)

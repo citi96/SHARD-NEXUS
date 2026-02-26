@@ -33,5 +33,5 @@ public abstract class BaseStatusEffect : IStatusEffect
 
     public virtual void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, List<CombatEventRecord> events) { }
 
-    public virtual void OnBeforeTakeDamage(CombatUnit unit, ref int damage, List<CombatEventRecord> events) { }
+    public virtual void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, List<CombatEventRecord> events) { }
 }
