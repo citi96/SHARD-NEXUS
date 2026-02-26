@@ -39,8 +39,10 @@ public static class EchoCatalog
     private static IReadOnlyList<EchoDefinition> BuildCatalog() =>
         new ReadOnlyCollection<EchoDefinition>(new List<EchoDefinition>
         {
-            // ID, Name, Rarity, Class, Resonance, HP, Mana, ATK, DEF, MR, AS, Range, Abilities
-            new(1, "Pyroth", Rarity.Common,    EchoClass.Vanguard,  Resonance.Fire,      650, 100, 45, 45, 30, 0.60f, 1, new int[]{ 1 }),
-            new(6, "Glacius", Rarity.Common,   EchoClass.Vanguard,  Resonance.Frost,     700, 100, 40, 40, 35, 0.55f, 1, new int[]{ 2 }),
+            // ID, Name, Rarity, Class, Resonance, HP, Mana, ATK, DEF, MR, AS, Range, Crit, Abilities
+            new(1, "Pyroth", Rarity.Common,    EchoClass.Vanguard,  Resonance.Fire,      650, 100, 45, 45, 30, 0.60f, 1, 0.00f, new int[]{ 1 }),
+            new(2, "Emberblade", Rarity.Common, EchoClass.Striker,   Resonance.Fire,      550, 100, 70, 25, 20, 0.90f, 1, 0.15f, new int[]{ 3 }),
+            new(3, "Voltedge", Rarity.Uncommon, EchoClass.Striker,   Resonance.Lightning, 500, 100, 80, 20, 25, 1.00f, 1, 0.20f, new int[]{ 4 }),
+            new(6, "Glacius", Rarity.Common,   EchoClass.Vanguard,  Resonance.Frost,     700, 100, 40, 40, 35, 0.55f, 1, 0.00f, new int[]{ 2 }),
         });
 }

@@ -19,5 +19,6 @@ public readonly record struct EchoDefinition(
     int BaseMR,
     float BaseAttackSpeed,
     int BaseAttackRange,
+    float BaseCritChance,
     int[] AbilityIds
 );

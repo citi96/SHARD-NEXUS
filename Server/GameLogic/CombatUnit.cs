@@ -18,6 +18,8 @@ internal sealed class CombatUnit
     public int Defense { get; init; }
     public int Mr { get; init; }
     public int AttackRange { get; init; }
+    public float CritChance { get; set; }
+    public int CritMultiplier { get; set; } = 150;
     public int AttackCooldown { get; init; }
     public int AttackCooldownRemaining { get; set; }
     public bool IsAlive { get; set; }
@@ -41,4 +43,9 @@ internal sealed class CombatUnit
     public int SlowPct { get; set; }
     public int SlowTicksLeft { get; set; }
     public int MoveAccumulator { get; set; } = 100;
+
+    // Striker specific effects
+    public int EmberbladeEmpoweredAttacks { get; set; }
+    public int BurnDps { get; set; }
+    public int BurnTicksLeft { get; set; }
 }

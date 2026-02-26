@@ -42,6 +42,7 @@ public sealed class CombatSimulator
     private readonly int _p0Id;
     private readonly int _p1Id;
     private readonly int _round;
+    private readonly Random _rng;
 
     // ── Incremental state ─────────────────────────
     private int _currentTick = 0;
@@ -66,6 +67,7 @@ public sealed class CombatSimulator
         _p0Id = p0.PlayerId;
         _p1Id = p1.PlayerId;
         _round = round;
+        _rng = new Random(seed);
 
         _units = new List<CombatUnit>();
         LoadUnits(p0, team: 0);
@@ -180,6 +182,8 @@ public sealed class CombatSimulator
                 Defense = defense,
                 Mr = mr,
                 AttackRange = range,
+                CritChance = def.BaseCritChance,
+                CritMultiplier = 150,
                 AttackCooldown = cooldown,
                 AttackCooldownRemaining = 0,
                 IsAlive = true,
@@ -246,6 +250,24 @@ public sealed class CombatSimulator
             if (unit.DamageReflectTicksLeft > 0) unit.DamageReflectTicksLeft--;
             if (unit.SlowTicksLeft > 0) unit.SlowTicksLeft--;
 
+            // Burn DoT tick
+            if (unit.BurnTicksLeft > 0)
+            {
+                unit.BurnTicksLeft--;
+                int burnDamage = unit.BurnDps / 60; // 60 ticks per second
+                if (burnDamage > 0)
+                {
+                    unit.Hp -= burnDamage;
+                    if (unit.Hp <= 0 && unit.IsAlive)
+                    {
+                        unit.IsAlive = false;
+                        tickEvents.Add(new CombatEventRecord { Type = "death", Target = unit.InstanceId });
+                    }
+                }
+            }
+
+            if (!unit.IsAlive) continue;
+
             // Normal cooldown decrement; speed boost adds a second decrement (2× speed)
             unit.AttackCooldownRemaining = Math.Max(0, unit.AttackCooldownRemaining - 1);
             if (unit.SpeedBoostTicksLeft > 0)
@@ -262,7 +284,25 @@ public sealed class CombatSimulator
             {
                 if (unit.AttackCooldownRemaining == 0)
                 {
-                    int rawDamage = Math.Max(1, unit.Attack - target.Defense);
+                    int baseDamage = unit.Attack;
+
+                    // Emberblade Empowered Attack (+50% damage)
+                    bool isEmpowered = unit.EmberbladeEmpoweredAttacks > 0;
+                    if (isEmpowered)
+                    {
+                        baseDamage = baseDamage * 150 / 100;
+                        unit.EmberbladeEmpoweredAttacks--;
+                    }
+
+                    int rawDamage = Math.Max(1, baseDamage - target.Defense);
+
+                    // Critical Strike Roll
+                    float roll = (float)_rng.NextDouble();
+                    bool isCrit = roll < unit.CritChance;
+                    if (isCrit)
+                    {
+                        rawDamage = rawDamage * unit.CritMultiplier / 100;
+                    }
 
                     // Shield absorbs damage first
                     int absorbed = Math.Min(target.Shield, rawDamage);
@@ -274,11 +314,18 @@ public sealed class CombatSimulator
 
                     tickEvents.Add(new CombatEventRecord
                     {
-                        Type = "attack",
+                        Type = isCrit ? "crit" : "attack",
                         Attacker = unit.InstanceId,
                         Target = target.InstanceId,
                         Damage = rawDamage,
                     });
+
+                    // Emberblade Burn application
+                    if (isEmpowered)
+                    {
+                        target.BurnDps = 30;
+                        target.BurnTicksLeft = 180; // 3 seconds at 60Hz
+                    }
 
                     unit.AttackCooldownRemaining = unit.AttackCooldown;
 
@@ -426,6 +473,43 @@ public sealed class CombatSimulator
                     if (ChebyshevDistance(caster, enemy) > 1) continue;
                     enemy.SlowPct = 40;
                     enemy.SlowTicksLeft = 180;
+                }
+                break;
+
+            case 3: // Lama Ardente (Emberblade) — empower next 3 attacks
+                caster.EmberbladeEmpoweredAttacks = 3;
+                break;
+
+            case 4: // Fendente Lampo (Voltedge) — chain attack 80% damage to 3 targets
+                {
+                    var targets = _units
+                        .Where(u => u.IsAlive && u.Team != caster.Team)
+                        .OrderBy(u => ChebyshevDistance(caster, u))
+                        .Take(3)
+                        .ToList();
+
+                    foreach (var target in targets)
+                    {
+                        int rawDamage = caster.Attack * 80 / 100;
+                        int absorbed = Math.Min(target.Shield, rawDamage);
+                        target.Shield -= absorbed;
+                        int damage = rawDamage - absorbed;
+                        if (damage > 0) target.Hp -= damage;
+
+                        events.Add(new CombatEventRecord
+                        {
+                            Type = "chain_attack",
+                            Attacker = caster.InstanceId,
+                            Target = target.InstanceId,
+                            Damage = rawDamage
+                        });
+
+                        if (target.Hp <= 0 && target.IsAlive)
+                        {
+                            target.IsAlive = false;
+                            events.Add(new CombatEventRecord { Type = "death", Target = target.InstanceId });
+                        }
+                    }
                 }
                 break;
         }
