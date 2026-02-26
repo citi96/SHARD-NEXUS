@@ -16,27 +16,27 @@ public class ReflectEffect : BaseBuffEffect
         _reflectPct = reflectPct;
     }
 
-    public override void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, ICombatEventDispatcher dispatcher)
+    public override void OnBeforeReceiveDamage(DamageContext context)
     {
-        if (damage <= 0 || !attacker.IsAlive) return;
+        if (context.CalculatedDamage <= 0 || !context.Attacker.IsAlive) return;
 
-        int reflected = damage * _reflectPct / 100;
+        int reflected = context.CalculatedDamage * _reflectPct / 100;
         if (reflected > 0)
         {
-            attacker.Hp -= reflected;
-            dispatcher.Dispatch(new CombatEventRecord
+            context.Attacker.Hp -= reflected;
+            context.Dispatcher.Dispatch(new CombatEventRecord
             {
                 Type = "reflect",
-                Attacker = unit.InstanceId,
-                Target = attacker.InstanceId,
+                Attacker = context.Target.InstanceId,
+                Target = context.Attacker.InstanceId,
                 Damage = reflected,
                 StatusEffectId = "Reflect"
             });
 
-            if (attacker.Hp <= 0 && attacker.IsAlive)
+            if (context.Attacker.Hp <= 0 && context.Attacker.IsAlive)
             {
-                attacker.IsAlive = false;
-                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = attacker.InstanceId });
+                context.Attacker.IsAlive = false;
+                context.Dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = context.Attacker.InstanceId });
             }
         }
     }

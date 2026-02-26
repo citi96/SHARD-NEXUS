@@ -79,7 +79,7 @@ public sealed class CombatSimulator
         {
             new DefenseProcessor(),
             new CriticalStrikeProcessor(),
-            new ReflectProcessor(),
+            new EffectDamageProcessor(), // Handles Reflect, Vulnerability, and Buffs via hooks
             new ShieldProcessor(),
             new HealthProcessor()
         };

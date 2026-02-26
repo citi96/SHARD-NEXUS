@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Server.Configuration;
 using Shared.Models.Structs;
+using Shared.Models.Enums;
 
 namespace Server.GameLogic;
 
@@ -51,13 +52,15 @@ public class CombatUnitFactory
             BaseMr = def.BaseMR,
             BaseAttackRange = def.BaseAttackRange,
             BaseCritChance = def.BaseCritChance,
-            BaseCritMultiplier = 150,
+            BaseCritMultiplier = def.BaseCritMultiplier,
             BaseAttackCooldown = cooldown,
             AttackCooldownRemaining = 0,
             IsAlive = true,
             Shield = bonuses.ShieldFlat,
             AbilityIds = def.AbilityIds,
-            TargetingStrategy = new NearestEnemyStrategy() // Default
+            TargetingStrategy = def.Class == EchoClass.Assassin 
+                ? new FarthestEnemyStrategy() 
+                : new NearestEnemyStrategy()
         };
     }
 

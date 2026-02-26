@@ -41,9 +41,15 @@ public interface IStatusEffect
     /// Called on the target of an attack before damage is deducted from Shield/Hp.
     /// Can modify the damage value.
     /// </summary>
-    void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, ICombatEventDispatcher dispatcher);
+    void OnBeforeReceiveDamage(DamageContext context);
+
+    /// <summary>
+    /// Called on the attacker before damage is processed.
+    /// </summary>
+    void OnBeforeDealDamage(DamageContext context);
 
     bool IsExpired { get; }
     bool PreventsActions { get; }
     bool IsDebuff { get; }
+    bool IsStealthed { get; }
 }

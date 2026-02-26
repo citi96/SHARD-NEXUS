@@ -13,7 +13,7 @@ public abstract class BaseStatusEffect : IStatusEffect
     public int RemainingTicks { get; protected set; }
     public bool IsExpired => RemainingTicks <= 0;
     public virtual bool PreventsActions => false;
-    public abstract bool IsDebuff { get; }
+    public virtual bool IsDebuff => false;
 
     protected BaseStatusEffect(int durationTicks)
     {
@@ -33,6 +33,9 @@ public abstract class BaseStatusEffect : IStatusEffect
     public virtual void ModifyStats(ref CombatUnitStats stats) { }
 
     public virtual void OnAttack(CombatUnit unit, CombatUnit target, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher) { }
+    
+    public virtual void OnBeforeReceiveDamage(DamageContext context) { }
+    public virtual void OnBeforeDealDamage(DamageContext context) { }
 
-    public virtual void OnBeforeTakeDamage(CombatUnit unit, CombatUnit attacker, ref int damage, ICombatEventDispatcher dispatcher) { }
+    public virtual bool IsStealthed => false;
 }

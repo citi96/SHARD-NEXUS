@@ -110,6 +110,8 @@ public sealed class CombatUnit
     }
 
 
+    public bool IsStealthed => _activeEffects.Any(e => e.IsStealthed);
+
     public bool IsActionable()
     {
         return IsAlive && !IsRetreating && !_activeEffects.Any(e => e.PreventsActions);

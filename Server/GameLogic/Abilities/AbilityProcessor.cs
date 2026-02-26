@@ -19,6 +19,8 @@ public static class AbilityProcessor
         { 6, new SparkbowAbilityHandler() }, // Sparkbow
         { 7, new FlameheartAbilityHandler() },
         { 8, new BeaconAbilityHandler() },
+        { 9, new FrostbiteAbilityHandler() },
+        { 10, new ShadeAbilityHandler() },
     };
 
     public static void Cast(int abilityId, CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)

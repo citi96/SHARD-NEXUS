@@ -15,7 +15,7 @@ public class NearestEnemyStrategy : ITargetingStrategy
 
         foreach (var candidate in allUnits)
         {
-            if (!candidate.IsAlive || candidate.Team == unit.Team || candidate.IsRetreating) 
+            if (!candidate.IsAlive || candidate.Team == unit.Team || candidate.IsRetreating || candidate.IsStealthed) 
                 continue;
 
             int dist = GridUtils.ChebyshevDistance(unit, candidate);
