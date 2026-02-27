@@ -49,6 +49,7 @@ public class ClientStateManager
     public event Action<ActionRejectedMessage>? OnActionRejected;
     public event Action<int, int>? OnEnergyChanged;
     public event Action<InterventionActivatedMessage>? OnInterventionActivated;
+    public event Action<EchoFusedMessage>? OnEchoFused;
 
     // ── Entry Point ───────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ public class ClientStateManager
             case MessageType.ActionRejected: HandleActionRejected(message); break;
             case MessageType.InterventionActivated: HandleInterventionActivated(message); break;
             case MessageType.EnergyUpdate: HandleEnergyUpdate(message); break;
+            case MessageType.EchoFused: HandleEchoFused(message); break;
         }
     }
 
@@ -179,6 +181,13 @@ public class ClientStateManager
         var msg = message.DeserializePayload<InterventionActivatedMessage>();
         if (msg == null) return;
         OnInterventionActivated?.Invoke(msg);
+    }
+
+    private void HandleEchoFused(NetworkMessage message)
+    {
+        var msg = message.DeserializePayload<EchoFusedMessage>();
+        if (msg == null) return;
+        OnEchoFused?.Invoke(msg);
     }
 
     private void HandleEnergyUpdate(NetworkMessage message)

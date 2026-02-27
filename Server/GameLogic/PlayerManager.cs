@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using Server.Configuration;
 using Shared.Models.Structs;
@@ -18,6 +19,7 @@ public class PlayerManager
 
     public event Action<int, PlayerState>? OnPlayerStateChanged;
     public event Action<int>? OnPlayerEliminated;
+    public event Action<int, FusionProcessor.FusionResult>? OnEchoFused;
 
     public PlayerManager(PlayerSettings settings, ResonanceSettings resonanceSettings)
     {
@@ -51,22 +53,26 @@ public class PlayerManager
 
     public void InitializePlayer(int playerId)
     {
+        var boardIds = new int[_settings.BoardSlots];
+        var benchIds = new int[_settings.BenchSlots];
+        Array.Fill(boardIds, -1);
+        Array.Fill(benchIds, -1);
+
         var newState = new PlayerState(
             PlayerId: playerId,
             NexusHealth: _settings.StartingHP,
             Gold: _settings.StartingGold,
             Level: 1,
             Xp: 0,
-            BoardEchoInstanceIds: new int[_settings.BoardSlots], // 4 cols × 4 rows = 16 slots (index = row * 4 + col)
-            BenchEchoInstanceIds: new int[_settings.BenchSlots],
+            BoardEchoInstanceIds: boardIds,
+            BoardEchoStarLevels: new byte[_settings.BoardSlots],
+            BenchEchoInstanceIds: benchIds,
+            BenchEchoStarLevels: new byte[_settings.BenchSlots],
             MutationIds: Array.Empty<int>(),
             WinStreak: 0,
             LossStreak: 0,
             ActiveResonances: Array.Empty<ResonanceBonus>()
         );
-
-        for (int i = 0; i < _settings.BoardSlots; i++) newState.BoardEchoInstanceIds[i] = -1;
-        for (int i = 0; i < _settings.BenchSlots; i++) newState.BenchEchoInstanceIds[i] = -1;
 
         if (_players.TryAdd(playerId, newState))
         {
@@ -153,19 +159,48 @@ public class PlayerManager
 
     /// <summary>
     /// Attempts to add a specific EchoInstance ID to the player's bench.
-    /// Returns true if added, false if the bench is full.
+    /// Triggers automatic fusion if 3 identical echoes exist. Returns true if added.
     /// </summary>
     public bool TryAddToBench(int playerId, int echoInstanceId)
     {
-        return UpdatePlayer(playerId, state =>
+        List<FusionProcessor.FusionResult>? fusions = null;
+
+        bool added = UpdatePlayer(playerId, state =>
         {
             int emptySlot = Array.IndexOf(state.BenchEchoInstanceIds, -1);
             if (emptySlot == -1) return null;
 
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
+            byte[] newBenchStars = (byte[])state.BenchEchoStarLevels.Clone();
             newBench[emptySlot] = echoInstanceId;
-            return state with { BenchEchoInstanceIds = newBench };
+            newBenchStars[emptySlot] = 1;
+
+            int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
+            byte[] newBoardStars = (byte[])state.BoardEchoStarLevels.Clone();
+
+            fusions = FusionProcessor.TryFuse(newBoard, newBoardStars, newBench, newBenchStars);
+
+            var resonances = fusions.Count > 0
+                ? ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds)
+                : state.ActiveResonances;
+
+            return state with
+            {
+                BenchEchoInstanceIds = newBench,
+                BenchEchoStarLevels = newBenchStars,
+                BoardEchoInstanceIds = newBoard,
+                BoardEchoStarLevels = newBoardStars,
+                ActiveResonances = resonances,
+            };
         });
+
+        if (added && fusions != null)
+        {
+            foreach (var fusion in fusions)
+                OnEchoFused?.Invoke(playerId, fusion);
+        }
+
+        return added;
     }
 
     /// <summary>
@@ -189,15 +224,19 @@ public class PlayerManager
 
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
             int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
+            byte[] newBenchStars = (byte[])state.BenchEchoStarLevels.Clone();
+            byte[] newBoardStars = (byte[])state.BoardEchoStarLevels.Clone();
 
-            if (benchSlot != -1) newBench[benchSlot] = -1;
-            if (boardSlot != -1) newBoard[boardSlot] = -1;
+            if (benchSlot != -1) { newBench[benchSlot] = -1; newBenchStars[benchSlot] = 0; }
+            if (boardSlot != -1) { newBoard[boardSlot] = -1; newBoardStars[boardSlot] = 0; }
 
             var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
             return state with
             {
                 BenchEchoInstanceIds = newBench,
                 BoardEchoInstanceIds = newBoard,
+                BenchEchoStarLevels = newBenchStars,
+                BoardEchoStarLevels = newBoardStars,
                 ActiveResonances = resonances,
             };
         });
@@ -240,14 +279,21 @@ public class PlayerManager
 
             int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
-            newBoard[boardSlot] = -1;
+            byte[] newBoardStars = (byte[])state.BoardEchoStarLevels.Clone();
+            byte[] newBenchStars = (byte[])state.BenchEchoStarLevels.Clone();
+
             newBench[emptyBench] = echoInstanceId;
+            newBenchStars[emptyBench] = newBoardStars[boardSlot];
+            newBoard[boardSlot] = -1;
+            newBoardStars[boardSlot] = 0;
 
             var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
             return state with
             {
                 BoardEchoInstanceIds = newBoard,
+                BoardEchoStarLevels = newBoardStars,
                 BenchEchoInstanceIds = newBench,
+                BenchEchoStarLevels = newBenchStars,
                 ActiveResonances = resonances,
             };
         });
@@ -269,14 +315,21 @@ public class PlayerManager
 
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
             int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
-            newBench[benchSlot] = -1;
+            byte[] newBenchStars = (byte[])state.BenchEchoStarLevels.Clone();
+            byte[] newBoardStars = (byte[])state.BoardEchoStarLevels.Clone();
+
             newBoard[boardIndex] = echoInstanceId;
+            newBoardStars[boardIndex] = newBenchStars[benchSlot];
+            newBench[benchSlot] = -1;
+            newBenchStars[benchSlot] = 0;
 
             var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
             return state with
             {
                 BenchEchoInstanceIds = newBench,
+                BenchEchoStarLevels = newBenchStars,
                 BoardEchoInstanceIds = newBoard,
+                BoardEchoStarLevels = newBoardStars,
                 ActiveResonances = resonances,
             };
         });

@@ -66,9 +66,23 @@ public class GameServer
         _phaseManager.OnPhaseChanged += OnPhaseChanged;
         _combatManager.OnAllCombatsComplete += OnAllCombatsComplete;
         _combatManager.OnActionRejected += SendActionRejected;
+        _playerManager.OnEchoFused += OnEchoFused;
         _networkManager.OnMessageReceived += HandleMessage;
         _networkManager.OnClientConnected += HandleClientConnected;
         _networkManager.OnClientDisconnected += _playerManager.RemovePlayer;
+    }
+
+    private void OnEchoFused(int playerId, FusionProcessor.FusionResult fusion)
+    {
+        var msg = NetworkMessage.Create(MessageType.EchoFused, new EchoFusedMessage
+        {
+            ResultInstanceId = fusion.ResultInstanceId,
+            NewStarLevel = fusion.NewStarLevel,
+            DefinitionId = fusion.DefinitionId,
+            IsOnBoard = fusion.IsOnBoard,
+            SlotIndex = fusion.SlotIndex,
+        });
+        _networkManager.SendMessage(playerId, msg);
     }
 
     private void OnPlayerStateChanged(int playerId, PlayerState state)

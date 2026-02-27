@@ -39,6 +39,7 @@ public enum MessageType : byte
     ActionRejected = 64,   // Server → Client: action rejected with reason
     InterventionActivated = 65, // Server → All: intervention validated and applied
     EnergyUpdate = 66,          // Server → Client: energy bar update
+    EchoFused = 67,              // Server → Client: echo fusion occurred
 
     // --- Errors ---
     Error = 255

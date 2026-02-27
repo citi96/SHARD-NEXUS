@@ -13,11 +13,17 @@ public class CombatSettings
     /// <summary>How fast snapshots are streamed to clients (0.05s = 20/sec).</summary>
     public float SnapshotSendIntervalSeconds { get; set; } = 0.05f;
 
-    /// <summary>Star-2 multiplier × 100 (180 = 1.80×). Integer to keep arithmetic deterministic.</summary>
-    public int StarTwoMultiplier { get; set; } = 180;
+    /// <summary>Star-2 HP multiplier × 100 (200 = ×2.0). Integer for deterministic arithmetic.</summary>
+    public int Star2HpPct { get; set; } = 200;
 
-    /// <summary>Star-3 multiplier × 100 (324 = 3.24×). Integer to keep arithmetic deterministic.</summary>
-    public int StarThreeMultiplier { get; set; } = 324;
+    /// <summary>Star-2 Attack multiplier × 100 (180 = ×1.8).</summary>
+    public int Star2AttackPct { get; set; } = 180;
+
+    /// <summary>Star-3 HP multiplier × 100 (300 = ×3.0).</summary>
+    public int Star3HpPct { get; set; } = 300;
+
+    /// <summary>Star-3 Attack multiplier × 100 (250 = ×2.5).</summary>
+    public int Star3AttackPct { get; set; } = 250;
 
     /// <summary>Attack cooldown in ticks by EchoClass name. Lower = faster.</summary>
     public Dictionary<string, int> AttackCooldownByClass { get; set; } = new()

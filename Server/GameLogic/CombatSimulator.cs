@@ -74,7 +74,7 @@ public sealed class CombatSimulator
         _p1Id = p1.PlayerId;
         _round = round;
         _rng = new Random(seed);
-        _unitFactory = new CombatUnitFactory(catalog, resSettings);
+        _unitFactory = new CombatUnitFactory(catalog, resSettings, settings);
         _damagePipeline = new List<IDamageProcessor>
         {
             new DefenseProcessor(),
@@ -153,8 +153,9 @@ public sealed class CombatSimulator
             int boardCol = idx % BoardCols;
             int boardRow = idx / BoardCols;
             int combatCol = team == 0 ? boardCol : CombatWidth - 1 - boardCol;
+            byte starLevel = state.BoardEchoStarLevels[idx];
 
-            _units.Add(_unitFactory.Create(instanceId, team, combatCol, boardRow, state.ActiveResonances));
+            _units.Add(_unitFactory.Create(instanceId, team, combatCol, boardRow, state.ActiveResonances, starLevel));
         }
     }
 

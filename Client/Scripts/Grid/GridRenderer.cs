@@ -59,6 +59,11 @@ public partial class GridRenderer : Control
     [Export] public Color ResonanceShadow = new(0.25f, 0.20f, 0.35f, 1.00f);
     [Export] public Color ResonancePrism = new(0.80f, 0.80f, 0.80f, 1.00f);
 
+    [ExportGroup("Star Colors")]
+    [Export] public Color Star1Color = new(0.70f, 0.70f, 0.70f, 1.00f);
+    [Export] public Color Star2Color = new(0.30f, 0.80f, 1.00f, 1.00f);
+    [Export] public Color Star3Color = new(1.00f, 0.85f, 0.10f, 1.00f);
+
     [ExportGroup("VFX / Target Colors")]
     [Export] public Color TargetHighlight = new(1.00f, 1.00f, 0.20f, 0.30f);
     [Export] public Color VfxBarrier = new(1.00f, 0.85f, 0.10f, 0.70f);
@@ -66,6 +71,7 @@ public partial class GridRenderer : Control
     [Export] public Color VfxAccelerate = new(0.10f, 1.00f, 0.30f, 0.40f);
     [Export] public Color VfxReposition = new(0.10f, 0.60f, 1.00f, 0.70f);
     [Export] public Color VfxRetreat = new(0.60f, 0.60f, 0.60f, 0.50f);
+    [Export] public Color VfxFusion = new(1.00f, 1.00f, 1.00f, 0.90f);
 
     /// <summary>
     /// Emitted when the player left-clicks an ally cell during the Preparation phase.
@@ -103,6 +109,7 @@ public partial class GridRenderer : Control
     private readonly Dictionary<int, float> _damageFlash = [];
     // VFX: key = unitInstanceId (unit-specific) or -playerId (whole-team, e.g. Accelerate)
     private readonly Dictionary<int, (string Type, int PlayerId, float TimeLeft)> _vfx = [];
+    private readonly Dictionary<int, float> _fusionFlash = []; // key = slotIndex (board), value = time left
 
     public override void _Ready()
     {
@@ -122,6 +129,7 @@ public partial class GridRenderer : Control
         _stateManager.OnPhaseChanged += OnPhaseChanged;
         _stateManager.OnCombatSnapshot += OnCombatSnapshot;
         _stateManager.OnInterventionActivated += OnInterventionActivated;
+        _stateManager.OnEchoFused += OnEchoFused;
     }
 
     public override void _ExitTree()
@@ -131,6 +139,7 @@ public partial class GridRenderer : Control
         _stateManager.OnPhaseChanged -= OnPhaseChanged;
         _stateManager.OnCombatSnapshot -= OnCombatSnapshot;
         _stateManager.OnInterventionActivated -= OnInterventionActivated;
+        _stateManager.OnEchoFused -= OnEchoFused;
     }
 
     /// <summary>
@@ -165,6 +174,7 @@ public partial class GridRenderer : Control
     {
         bool dirty = TickFlash(_attackFlash, (float)delta);
         dirty |= TickFlash(_damageFlash, (float)delta);
+        dirty |= TickFlash(_fusionFlash, (float)delta);
         dirty |= TickVfx((float)delta);
         if (dirty) QueueRedraw();
     }
@@ -179,6 +189,7 @@ public partial class GridRenderer : Control
         DrawDivider();
         DrawTargetHighlights();
         DrawVfxEffects();
+        DrawFusionFlash();
     }
 
     private void DrawBackgrounds()
@@ -206,12 +217,14 @@ public partial class GridRenderer : Control
         if (_ownState.HasValue)
         {
             var ids = _ownState.Value.BoardEchoInstanceIds;
+            var stars = _ownState.Value.BoardEchoStarLevels;
             for (int col = 0; col < AllyCols; col++)
                 for (int row = 0; row < Rows; row++)
                 {
                     int idx = row * AllyCols + col;
                     if (idx >= ids.Length || ids[idx] == -1) continue;
-                    DrawEchoInCell(col, row, ids[idx], font, fs);
+                    byte star = (idx < stars.Length) ? stars[idx] : (byte)1;
+                    DrawEchoInCell(col, row, ids[idx], star, font, fs);
                 }
         }
 
@@ -220,18 +233,20 @@ public partial class GridRenderer : Control
         if (opp.HasValue)
         {
             var ids = opp.Value.BoardEchoInstanceIds;
+            var stars = opp.Value.BoardEchoStarLevels;
             for (int localCol = 0; localCol < AllyCols; localCol++)
                 for (int row = 0; row < Rows; row++)
                 {
                     int idx = row * AllyCols + localCol;
                     int displayCol = localCol + AllyCols;
                     if (idx >= ids.Length || ids[idx] == -1) continue;
-                    DrawEchoInCell(displayCol, row, ids[idx], font, fs);
+                    byte star = (idx < stars.Length) ? stars[idx] : (byte)1;
+                    DrawEchoInCell(displayCol, row, ids[idx], star, font, fs);
                 }
         }
     }
 
-    private void DrawEchoInCell(int col, int row, int instanceId, Font font, int fontSize)
+    private void DrawEchoInCell(int col, int row, int instanceId, byte starLevel, Font font, int fontSize)
     {
         var def = EchoCatalog.GetByInstanceId(instanceId);
         string name = def?.Name ?? $"#{instanceId / 1000}";
@@ -255,8 +270,12 @@ public partial class GridRenderer : Control
         float textX = isEnemy ? rect.End.X - 4 : rect.Position.X + 4;
         DrawString(font, new Vector2(textX, rect.Position.Y + margin + fontSize + 2),
             name, align, rect.Size.X - 8, fontSize, EchoNameColor);
+
+        int stars = Mathf.Clamp(starLevel, 1, 3);
+        string starText = new string('\u2605', stars);
+        Color starColor = stars switch { 3 => Star3Color, 2 => Star2Color, _ => Star1Color };
         DrawString(font, new Vector2(textX, rect.Position.Y + 46),
-            "\u2605", align, rect.Size.X - 8, fontSize, EchoNameColor);
+            starText, align, rect.Size.X - 8, fontSize, starColor);
 
         // HP / Mana fractions — prep: full HP, zero mana; combat: from snapshot
         float hpFraction = 1f;
@@ -388,6 +407,17 @@ public partial class GridRenderer : Control
         }
     }
 
+    private void DrawFusionFlash()
+    {
+        foreach (var (slotIndex, timeLeft) in _fusionFlash)
+        {
+            int col = slotIndex % AllyCols;
+            int row = slotIndex / AllyCols;
+            float alpha = Mathf.Clamp(timeLeft / 1.5f, 0f, 1f);
+            DrawRect(CellRect(col, row), new Color(VfxFusion, alpha));
+        }
+    }
+
     public override void _GuiInput(InputEvent @event)
     {
         switch (@event)
@@ -495,6 +525,13 @@ public partial class GridRenderer : Control
         // Whole-team effects (Accelerate) keyed as -playerId; unit-specific keyed as unitId
         int key = msg.InterventionType == "Accelerate" ? -msg.PlayerId : msg.TargetUnitId;
         _vfx[key] = (msg.InterventionType, msg.PlayerId, dur);
+        QueueRedraw();
+    }
+
+    private void OnEchoFused(EchoFusedMessage msg)
+    {
+        if (!msg.IsOnBoard) return;
+        _fusionFlash[msg.SlotIndex] = 1.5f;
         QueueRedraw();
     }
 

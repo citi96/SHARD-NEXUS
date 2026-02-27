@@ -13,14 +13,17 @@ public class CombatUnitFactory
 {
     private readonly Dictionary<int, EchoDefinition> _catalog;
     private readonly ResonanceSettings _resSettings;
+    private readonly CombatSettings _combatSettings;
 
-    public CombatUnitFactory(IEnumerable<EchoDefinition> catalog, ResonanceSettings resSettings)
+    public CombatUnitFactory(IEnumerable<EchoDefinition> catalog, ResonanceSettings resSettings, CombatSettings combatSettings)
     {
         _catalog = catalog.ToDictionary(d => d.Id);
         _resSettings = resSettings;
+        _combatSettings = combatSettings;
     }
 
-    public CombatUnit Create(int instanceId, int team, int combatCol, int boardRow, ResonanceBonus[] playerResonances)
+    public CombatUnit Create(int instanceId, int team, int combatCol, int boardRow,
+        ResonanceBonus[] playerResonances, byte starLevel = 1)
     {
         int definitionId = instanceId / 1000;
         if (!_catalog.TryGetValue(definitionId, out var def))
@@ -28,10 +31,12 @@ public class CombatUnitFactory
 
         var bonuses = ComputeStatBonuses(playerResonances);
 
-        int multiplier = 100;
-        int hp = (def.BaseHealth * multiplier / 100) + (def.BaseHealth * bonuses.HpPct / 100);
-        int attack = (def.BaseAttack * multiplier / 100) + (def.BaseAttack * bonuses.AtkPct / 100);
-        int defense = (def.BaseDefense * multiplier / 100) + (def.BaseDefense * bonuses.DefPct / 100);
+        int hpMult = starLevel switch { 2 => _combatSettings.Star2HpPct, 3 => _combatSettings.Star3HpPct, _ => 100 };
+        int atkMult = starLevel switch { 2 => _combatSettings.Star2AttackPct, 3 => _combatSettings.Star3AttackPct, _ => 100 };
+
+        int hp = (def.BaseHealth * hpMult / 100) + (def.BaseHealth * bonuses.HpPct / 100);
+        int attack = (def.BaseAttack * atkMult / 100) + (def.BaseAttack * bonuses.AtkPct / 100);
+        int defense = def.BaseDefense + (def.BaseDefense * bonuses.DefPct / 100);
         int cooldown = (int)(60f / def.BaseAttackSpeed);
         if (bonuses.AsPct > 0)
             cooldown = cooldown * 100 / (100 + bonuses.AsPct);

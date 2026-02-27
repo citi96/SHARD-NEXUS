@@ -1,8 +1,11 @@
 #nullable enable
+using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using Shared.Data;
 using Shared.Models.Enums;
 using Shared.Models.Structs;
+using Shared.Network.Messages;
 
 namespace Client.Scripts.Grid;
 
@@ -62,10 +65,17 @@ public partial class BenchRenderer : Control
     [Signal]
     public delegate void SellRequestedEventHandler(int instanceId);
 
+    [ExportGroup("Star Colors")]
+    [Export] public Color Star1Color = new(0.70f, 0.70f, 0.70f, 1.00f);
+    [Export] public Color Star2Color = new(0.30f, 0.80f, 1.00f, 1.00f);
+    [Export] public Color Star3Color = new(1.00f, 0.85f, 0.10f, 1.00f);
+    [Export] public Color VfxFusion = new(1.00f, 1.00f, 1.00f, 0.90f);
+
     private ClientStateManager? _stateManager;
     private PlayerState? _ownState;
     private GamePhase _currentPhase = GamePhase.WaitingForPlayers;
     private int _selectedSlot = -1;
+    private readonly Dictionary<int, float> _fusionFlash = [];
 
     public override void _Ready()
     {
@@ -83,12 +93,14 @@ public partial class BenchRenderer : Control
         _stateManager = stateManager;
         _stateManager.OnOwnStateChanged += OnOwnStateChanged;
         _stateManager.OnPhaseChanged += OnPhaseChanged;
+        _stateManager.OnEchoFused += OnEchoFused;
     }
 
     public override void _ExitTree()
     {
         if (_stateManager == null) return;
         _stateManager.OnOwnStateChanged -= OnOwnStateChanged;
+        _stateManager.OnEchoFused -= OnEchoFused;
         _stateManager.OnPhaseChanged -= OnPhaseChanged;
     }
 
@@ -99,6 +111,17 @@ public partial class BenchRenderer : Control
         QueueRedraw();
     }
 
+    public override void _Process(double delta)
+    {
+        if (_fusionFlash.Count == 0) return;
+        foreach (var key in _fusionFlash.Keys.ToList())
+        {
+            _fusionFlash[key] -= (float)delta;
+            if (_fusionFlash[key] <= 0) _fusionFlash.Remove(key);
+        }
+        QueueRedraw();
+    }
+
     public override void _Draw()
     {
         if (!_ownState.HasValue) return;
@@ -106,6 +129,7 @@ public partial class BenchRenderer : Control
         var font = ThemeDB.FallbackFont;
         const int fs = 11;
         var ids = _ownState.Value.BenchEchoInstanceIds;
+        var starLevels = _ownState.Value.BenchEchoStarLevels;
 
         for (int i = 0; i < BenchSlots; i++)
         {
@@ -136,11 +160,22 @@ public partial class BenchRenderer : Control
                 string name = def?.Name ?? $"#{instanceId / 1000}";
                 DrawString(font, rect.Position + new Vector2(4, fs + 4),
                     name, HorizontalAlignment.Left, rect.Size.X - 4, fs, SlotNameColor);
+
+                int stars = Mathf.Clamp((i < starLevels.Length) ? starLevels[i] : 1, 1, 3);
+                string starText = new string('\u2605', stars);
+                Color starColor = stars switch { 3 => Star3Color, 2 => Star2Color, _ => Star1Color };
                 DrawString(font, rect.Position + new Vector2(4, 46),
-                    "\u2605", HorizontalAlignment.Left, rect.Size.X - 4, fs, SlotNameColor);
+                    starText, HorizontalAlignment.Left, rect.Size.X - 4, fs, starColor);
 
                 // HP bar (always full — bench echoes don't take damage)
                 DrawBars(rect);
+
+                // Fusion flash overlay
+                if (_fusionFlash.TryGetValue(i, out float timeLeft))
+                {
+                    float alpha = Mathf.Clamp(timeLeft / 1.5f, 0f, 1f);
+                    DrawRect(rect, new Color(VfxFusion, alpha));
+                }
             }
 
             if (i == _selectedSlot)
@@ -182,6 +217,13 @@ public partial class BenchRenderer : Control
             EmitSignal(SignalName.EchoSelected, ids[slotIndex], slotIndex);
         else if (btn.ButtonIndex == MouseButton.Right)
             EmitSignal(SignalName.SellRequested, ids[slotIndex]);
+    }
+
+    private void OnEchoFused(EchoFusedMessage msg)
+    {
+        if (msg.IsOnBoard) return;
+        _fusionFlash[msg.SlotIndex] = 1.5f;
+        QueueRedraw();
     }
 
     private void OnOwnStateChanged(PlayerState state)
