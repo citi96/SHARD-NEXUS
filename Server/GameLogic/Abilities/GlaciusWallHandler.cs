@@ -19,7 +19,7 @@ public class GlaciusWallHandler : IAbilityHandler
         {
             if (GridUtils.ChebyshevDistance(caster, enemy) <= 1)
             {
-                enemy.AddEffect(new SlowEffect(180, 40)); // 3s, 40% slow
+                enemy.AddEffect(new SlowEffect(CombatConstants.Ticks(3f), 40)); // 3s, 40% slow
             }
         }
     }

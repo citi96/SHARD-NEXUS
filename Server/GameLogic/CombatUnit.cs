@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Shared.Network.Messages;
 
 namespace Server.GameLogic;
 
@@ -115,5 +116,18 @@ public sealed class CombatUnit
     public bool IsActionable()
     {
         return IsAlive && !IsRetreating && !_activeEffects.Any(e => e.PreventsActions);
+    }
+
+    /// <summary>
+    /// If this unit has reached 0 HP while still flagged as alive, marks it dead
+    /// and dispatches the "death" event. Returns true when the kill is applied.
+    /// Centralises the death pattern so handlers never duplicate it.
+    /// </summary>
+    public bool TryMarkDead(ICombatEventDispatcher dispatcher)
+    {
+        if (Hp > 0 || !IsAlive) return false;
+        IsAlive = false;
+        dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = InstanceId });
+        return true;
     }
 }

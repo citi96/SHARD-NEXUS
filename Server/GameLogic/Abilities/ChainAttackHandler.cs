@@ -32,7 +32,7 @@ public class ChainAttackHandler : IAbilityHandler
             int baseDamage = caster.GetEffectiveStats().Attack;
             int damage = baseDamage * _damagePct / 100;
             
-            target.Hp -= damage; 
+            target.Hp -= damage;
 
             dispatcher.Dispatch(new CombatEventRecord
             {
@@ -42,11 +42,7 @@ public class ChainAttackHandler : IAbilityHandler
                 Damage = damage
             });
 
-            if (target.Hp <= 0 && target.IsAlive)
-            {
-                target.IsAlive = false;
-                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = target.InstanceId });
-            }
+            target.TryMarkDead(dispatcher);
         }
     }
 }

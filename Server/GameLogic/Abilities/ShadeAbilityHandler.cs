@@ -10,10 +10,7 @@ public class ShadeAbilityHandler : IAbilityHandler
 {
     public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
-        // 2s Invisibility (120 ticks)
-        caster.AddEffect(new InvisibilityEffect(120));
-        
-        // Empowerment (lasts until attack or max 5s)
-        caster.AddEffect(new ShadeEmpowerEffect(300));
+        caster.AddEffect(new InvisibilityEffect(CombatConstants.Ticks(2f)));    // 2s
+        caster.AddEffect(new ShadeEmpowerEffect(CombatConstants.Ticks(5f)));    // 5s, consumed on next attack
     }
 }

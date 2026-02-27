@@ -30,8 +30,7 @@ public class BeaconAbilityHandler : IAbilityHandler
         // Clear debuffs
         target.ClearDebuffs();
 
-        // 3s Immunity (180 ticks)
-        target.AddEffect(new ImmunityEffect(180));
+        target.AddEffect(new ImmunityEffect(CombatConstants.Ticks(3f))); // 3s
 
         dispatcher.Dispatch(new CombatEventRecord
         {

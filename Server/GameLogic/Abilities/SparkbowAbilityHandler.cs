@@ -11,6 +11,6 @@ public class SparkbowAbilityHandler : IAbilityHandler
 {
     public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
-        caster.AddEffect(new SparkbowBouncingEffect(300, 5)); // Duration or until charges empty
+        caster.AddEffect(new SparkbowBouncingEffect(CombatConstants.Ticks(5f), 5)); // 5s or until charges empty
     }
 }

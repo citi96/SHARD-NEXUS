@@ -24,6 +24,9 @@ public class GameServer
     private readonly List<EchoDefinition> _echoCatalog;
     private readonly Random _rng;
 
+    private const int PlayerBoardCols = 4;
+    private const int PlayerBoardRows = 4;
+
     private bool _isRunning;
 
     public GameServer(
@@ -241,68 +244,46 @@ public class GameServer
         switch (message.Type)
         {
             case MessageType.RefreshShop:
-                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
-                {
-                    SendActionRejected(clientId, "RefreshShop", "Puoi rinfrescare lo shop solo in fase Preparation");
-                    break;
-                }
+                if (!RequirePhase(clientId, "RefreshShop", GamePhase.Preparation)) break;
                 if (!_shopManager.HandleRefresh(clientId))
                     SendActionRejected(clientId, "RefreshShop", "Oro insufficiente");
                 break;
 
             case MessageType.BuyEcho:
-                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
-                {
-                    SendActionRejected(clientId, "BuyEcho", "Puoi comprare echo solo in fase Preparation");
-                    break;
-                }
+                if (!RequirePhase(clientId, "BuyEcho", GamePhase.Preparation)) break;
                 var buyMsg = message.DeserializePayload<BuyEchoMessage>();
                 if (buyMsg != null && !_shopManager.HandleBuy(clientId, buyMsg.ShopSlot))
                     SendActionRejected(clientId, "BuyEcho", "Oro insufficiente o bench piena");
                 break;
 
             case MessageType.BuyXP:
-                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
-                {
-                    SendActionRejected(clientId, "BuyXP", "Puoi comprare XP solo in fase Preparation");
-                    break;
-                }
+                if (!RequirePhase(clientId, "BuyXP", GamePhase.Preparation)) break;
                 _playerManager.HandleBuyXP(clientId);
                 break;
 
             case MessageType.SellEcho:
-                // Selling should probably be allowed in many phases, but let's stick to Prep/Reward/Mutation for now if needed.
-                // Or just prep.
                 var sellMsg = message.DeserializePayload<SellEchoMessage>();
                 if (sellMsg != null)
                     _shopManager.HandleSell(clientId, sellMsg.EchoInstanceId);
                 break;
 
             case MessageType.PositionEcho:
-                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
-                {
-                    SendActionRejected(clientId, "PositionEcho", "Puoi posizionare echo solo in fase Preparation");
-                    break;
-                }
+                if (!RequirePhase(clientId, "PositionEcho", GamePhase.Preparation)) break;
                 var posMsg = message.DeserializePayload<PositionEchoMessage>();
                 if (posMsg == null) break;
-                if (posMsg.BoardX < 0 || posMsg.BoardX > 3 ||
-                    posMsg.BoardY < 0 || posMsg.BoardY > 3)
+                if (posMsg.BoardX < 0 || posMsg.BoardX >= PlayerBoardCols ||
+                    posMsg.BoardY < 0 || posMsg.BoardY >= PlayerBoardRows)
                 {
                     SendActionRejected(clientId, "PositionEcho", "Coordinate non valide");
                     break;
                 }
-                int boardIndex = posMsg.BoardY * 4 + posMsg.BoardX;
+                int boardIndex = posMsg.BoardY * PlayerBoardCols + posMsg.BoardX;
                 if (!_playerManager.TryMoveToBoard(clientId, posMsg.EchoInstanceId, boardIndex))
                     SendActionRejected(clientId, "PositionEcho", "Unità non in bench, slot occupato o limite livello raggiunto");
                 break;
 
             case MessageType.RemoveFromBoard:
-                if (_phaseManager.CurrentPhase != GamePhase.Preparation)
-                {
-                    SendActionRejected(clientId, "RemoveFromBoard", "Puoi rimuovere echo solo in fase Preparation");
-                    break;
-                }
+                if (!RequirePhase(clientId, "RemoveFromBoard", GamePhase.Preparation)) break;
                 var removeMsg = message.DeserializePayload<RemoveFromBoardMessage>();
                 if (removeMsg == null) break;
                 if (!_playerManager.TryMoveToBench(clientId, removeMsg.EchoInstanceId))
@@ -310,11 +291,7 @@ public class GameServer
                 break;
 
             case MessageType.UseIntervention:
-                if (_phaseManager.CurrentPhase != GamePhase.Combat)
-                {
-                    SendActionRejected(clientId, "UseIntervention", "Puoi usare interventi solo in fase Combat");
-                    break;
-                }
+                if (!RequirePhase(clientId, "UseIntervention", GamePhase.Combat)) break;
                 var intMsg = message.DeserializePayload<UseInterventionMessage>();
                 if (intMsg == null) break;
                 if (!Enum.TryParse<InterventionType>(intMsg.CardId, out var intType))
@@ -325,6 +302,17 @@ public class GameServer
                 _combatManager.TryQueueIntervention(clientId, intType, intMsg.TargetId);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Returns true if <see cref="PhaseManager.CurrentPhase"/> matches <paramref name="required"/>.
+    /// Otherwise sends an ActionRejected message and returns false, so callers can break immediately.
+    /// </summary>
+    private bool RequirePhase(int clientId, string action, GamePhase required)
+    {
+        if (_phaseManager.CurrentPhase == required) return true;
+        SendActionRejected(clientId, action, $"Azione non disponibile nella fase corrente (richiede: {required})");
+        return false;
     }
 
     public void Start()

@@ -10,6 +10,6 @@ public class FrostbiteAbilityHandler : IAbilityHandler
 {
     public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
-        caster.AddEffect(new LamaGelidaEffect(600)); // 10s window to use 4 attacks
+        caster.AddEffect(new LamaGelidaEffect(CombatConstants.Ticks(10f))); // 10s window to use 4 attacks
     }
 }

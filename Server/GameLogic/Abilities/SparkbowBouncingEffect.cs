@@ -42,11 +42,7 @@ public class SparkbowBouncingEffect : BaseStatusEffect
                 Damage = bounceDamage
             });
 
-            if (t.Hp <= 0 && t.IsAlive)
-            {
-                t.IsAlive = false;
-                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = t.InstanceId });
-            }
+            t.TryMarkDead(dispatcher);
         }
     }
 

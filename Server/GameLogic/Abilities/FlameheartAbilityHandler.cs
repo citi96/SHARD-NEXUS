@@ -11,8 +11,7 @@ public class FlameheartAbilityHandler : IAbilityHandler
 {
     public void Execute(CombatUnit caster, List<CombatUnit> allUnits, ICombatEventDispatcher dispatcher)
     {
-        // 5 seconds = 300 ticks (60 ticks per second)
-        int duration = 300;
+        int duration = CombatConstants.Ticks(5f); // 5s
         int speedBonusPct = 30;
 
         foreach (var unit in allUnits)
