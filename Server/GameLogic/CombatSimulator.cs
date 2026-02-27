@@ -22,15 +22,15 @@ namespace Server.GameLogic;
 public sealed class CombatSimulator
 {
     // ──────────────────────────────────────────────
-    // Board geometry
-    // Player board: 7 cols × 4 rows = 28 slots
-    //   BoardIndex → col = idx % 7,  row = idx / 7
-    // Team 0 occupies cols 0-6  (left side)
-    // Team 1 occupies cols 7-13 (right, mirrored: col = 13 - (idx%7))
-    // Combined board: 14 wide × 4 tall
+    // Board geometry  (must match Client GridRenderer)
+    // Player board: 4 cols × 4 rows = 16 slots
+    //   BoardIndex → col = idx % 4,  row = idx / 4
+    // Team 0 occupies cols 0-3  (left side)
+    // Team 1 occupies cols 4-7  (right, mirrored)
+    // Combined board: 8 wide × 4 tall
     // ──────────────────────────────────────────────
-    private const int BoardCols = 7;
-    private const int CombatWidth = 14;
+    private const int BoardCols = CombatConstants.PlayerBoardCols;       // 4
+    private const int CombatWidth = CombatConstants.CombatWidth;         // 8
 
     private const int ManaPerAttack = 10;
     private const int ManaPerHit = 5;

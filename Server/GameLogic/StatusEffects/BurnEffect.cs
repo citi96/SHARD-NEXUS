@@ -30,11 +30,7 @@ public class BurnEffect : BaseDebuffEffect
                 Damage = _dps
             });
 
-            if (unit.Hp <= 0 && unit.IsAlive)
-            {
-                unit.IsAlive = false;
-                dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = unit.InstanceId });
-            }
+            unit.TryMarkDead(dispatcher);
         }
     }
 }

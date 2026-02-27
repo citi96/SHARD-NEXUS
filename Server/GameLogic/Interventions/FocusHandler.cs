@@ -11,15 +11,14 @@ public class FocusHandler : IInterventionHandler
 
     public void Handle(PendingIntervention intervention, List<CombatUnit> units, InterventionSettings settings, ICombatEventDispatcher dispatcher)
     {
-        var target = units.FirstOrDefault(u => u.InstanceId == intervention.TargetId && u.IsAlive);
-        if (target != null && target.Team != intervention.Team)
+        var target = InterventionProcessor.FindEnemyTarget(units, intervention);
+        if (target == null) return;
+
+        var allies = units.Where(u => u.Team == intervention.Team && u.IsAlive && !u.IsRetreating);
+        foreach (var ally in allies)
         {
-            var allies = units.Where(u => u.Team == intervention.Team && u.IsAlive && !u.IsRetreating);
-            foreach (var ally in allies)
-            {
-                ally.FocusTargetId = intervention.TargetId;
-                ally.FocusTicksLeft = settings.FocusDurationTicks;
-            }
+            ally.FocusTargetId = intervention.TargetId;
+            ally.FocusTicksLeft = settings.FocusDurationTicks;
         }
     }
 }

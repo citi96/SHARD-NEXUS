@@ -9,8 +9,8 @@ namespace Server.GameLogic;
 public class CombatBoard
 {
     private readonly List<CombatUnit> _units;
-    private const int CombatWidth = 14;
-    private const int CombatHeight = 4;
+    private const int CombatWidth = CombatConstants.CombatWidth;   // 8
+    private const int CombatHeight = CombatConstants.CombatHeight; // 4
 
     public CombatBoard(List<CombatUnit> units)
     {

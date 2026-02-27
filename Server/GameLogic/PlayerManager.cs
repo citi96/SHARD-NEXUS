@@ -25,6 +25,30 @@ public class PlayerManager
         _resonanceSettings = resonanceSettings;
     }
 
+    /// <summary>
+    /// Atomically reads the current state, applies <paramref name="transform"/>, and publishes the change.
+    /// <paramref name="transform"/> returns null when the update should be aborted (e.g. precondition failure).
+    /// </summary>
+    private bool UpdatePlayer(int playerId, Func<PlayerState, PlayerState?> transform,
+        Action<int, PlayerState>? afterUpdate = null)
+    {
+        while (true)
+        {
+            if (!_players.TryGetValue(playerId, out var state))
+                return false;
+
+            var newState = transform(state);
+            if (newState == null) return false;
+
+            if (_players.TryUpdate(playerId, newState.Value, state))
+            {
+                OnPlayerStateChanged?.Invoke(playerId, newState.Value);
+                afterUpdate?.Invoke(playerId, newState.Value);
+                return true;
+            }
+        }
+    }
+
     public void InitializePlayer(int playerId)
     {
         var newState = new PlayerState(
@@ -75,77 +99,36 @@ public class PlayerManager
     public bool TryDeductGold(int playerId, int amount)
     {
         if (amount < 0) return false;
-
-        while (true)
-        {
-            if (!_players.TryGetValue(playerId, out var state))
-                return false;
-
-            if (state.Gold < amount)
-                return false;
-
-            var newState = state with { Gold = Math.Max(0, state.Gold - amount) };
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return true;
-            }
-        }
+        return UpdatePlayer(playerId, state =>
+            state.Gold < amount ? null : state with { Gold = Math.Max(0, state.Gold - amount) });
     }
 
     public void AddGold(int playerId, int amount)
     {
         if (amount <= 0) return;
-
-        while (true)
-        {
-            if (!_players.TryGetValue(playerId, out var state))
-                return;
-
-            int newGold = Math.Min(state.Gold + amount, _settings.MaxGold);
-            var newState = state with { Gold = newGold };
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return;
-            }
-        }
+        UpdatePlayer(playerId, state =>
+            state with { Gold = Math.Min(state.Gold + amount, _settings.MaxGold) });
     }
 
     public void ModifyHP(int playerId, int amount)
     {
-        while (true)
-        {
-            if (!_players.TryGetValue(playerId, out var state))
-                return;
-
-            var newState = state with { NexusHealth = Math.Max(0, state.NexusHealth + amount) };
-            if (_players.TryUpdate(playerId, newState, state))
+        UpdatePlayer(playerId,
+            state => state with { NexusHealth = Math.Max(0, state.NexusHealth + amount) },
+            afterUpdate: (id, newState) =>
             {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-
                 if (newState.NexusHealth <= 0)
-                {
-                    OnPlayerEliminated?.Invoke(playerId);
-                }
-                return;
-            }
-        }
+                    OnPlayerEliminated?.Invoke(id);
+            });
     }
 
     public void AddXP(int playerId, int amount)
     {
         if (amount <= 0) return;
-
-        while (true)
+        UpdatePlayer(playerId, state =>
         {
-            if (!_players.TryGetValue(playerId, out var state))
-                return;
-
             int currentXp = state.Xp + amount;
             int currentLevel = state.Level;
 
-            // Loop checking if we can level up
             while (true)
             {
                 if (_settings.XpToLevel.TryGetValue(currentLevel.ToString(), out int requiredXp))
@@ -155,26 +138,17 @@ public class PlayerManager
                         currentXp -= requiredXp;
                         currentLevel++;
                     }
-                    else
-                    {
-                        break;
-                    }
+                    else break;
                 }
                 else
                 {
-                    // Reached max level configured
                     currentXp = 0;
                     break;
                 }
             }
 
-            var newState = state with { Xp = currentXp, Level = currentLevel };
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return;
-            }
-        }
+            return state with { Xp = currentXp, Level = currentLevel };
+        });
     }
 
     /// <summary>
@@ -183,25 +157,15 @@ public class PlayerManager
     /// </summary>
     public bool TryAddToBench(int playerId, int echoInstanceId)
     {
-        while (true)
+        return UpdatePlayer(playerId, state =>
         {
-            if (!_players.TryGetValue(playerId, out var state))
-                return false;
-
             int emptySlot = Array.IndexOf(state.BenchEchoInstanceIds, -1);
-            if (emptySlot == -1)
-                return false;
+            if (emptySlot == -1) return null;
 
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
             newBench[emptySlot] = echoInstanceId;
-
-            var newState = state with { BenchEchoInstanceIds = newBench };
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return true;
-            }
-        }
+            return state with { BenchEchoInstanceIds = newBench };
+        });
     }
 
     /// <summary>
@@ -210,32 +174,18 @@ public class PlayerManager
     /// </summary>
     public void UpdateStreak(int playerId, bool won)
     {
-        while (true)
-        {
-            if (!_players.TryGetValue(playerId, out var state)) return;
-
-            var newState = won
-                ? state with { WinStreak = state.WinStreak + 1, LossStreak = 0 }
-                : state with { LossStreak = state.LossStreak + 1, WinStreak = 0 };
-
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return;
-            }
-        }
+        UpdatePlayer(playerId, state => won
+            ? state with { WinStreak = state.WinStreak + 1, LossStreak = 0 }
+            : state with { LossStreak = state.LossStreak + 1, WinStreak = 0 });
     }
 
     public bool TryRemoveFromBenchOrBoard(int playerId, int echoInstanceId)
     {
-        while (true)
+        return UpdatePlayer(playerId, state =>
         {
-            if (!_players.TryGetValue(playerId, out var state)) return false;
-
             int benchSlot = Array.IndexOf(state.BenchEchoInstanceIds, echoInstanceId);
             int boardSlot = Array.IndexOf(state.BoardEchoInstanceIds, echoInstanceId);
-
-            if (benchSlot == -1 && boardSlot == -1) return false;
+            if (benchSlot == -1 && boardSlot == -1) return null;
 
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
             int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
@@ -244,39 +194,25 @@ public class PlayerManager
             if (boardSlot != -1) newBoard[boardSlot] = -1;
 
             var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
-            var newState = state with
+            return state with
             {
                 BenchEchoInstanceIds = newBench,
                 BoardEchoInstanceIds = newBoard,
                 ActiveResonances = resonances,
             };
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return true;
-            }
-        }
+        });
     }
 
     public void GrantEndOfRoundGold(int playerId)
     {
-        while (true)
+        UpdatePlayer(playerId, state =>
         {
-            if (!_players.TryGetValue(playerId, out var state)) return;
-
             int interest = Math.Min(_settings.MaxInterest, state.Gold / 10);
             int streak = Math.Max(state.WinStreak, state.LossStreak);
             int streakBonus = streak >= 6 ? 3 : streak >= 4 ? 2 : streak >= 2 ? 1 : 0;
             int earned = _settings.BaseGoldPerRound + interest + streakBonus;
-
-            int newGold = Math.Min(state.Gold + earned, _settings.MaxGold);
-            var newState = state with { Gold = newGold };
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return;
-            }
-        }
+            return state with { Gold = Math.Min(state.Gold + earned, _settings.MaxGold) };
+        });
     }
 
     public void GrantAutoXp(int playerId)
@@ -294,15 +230,13 @@ public class PlayerManager
 
     public bool TryMoveToBench(int playerId, int echoInstanceId)
     {
-        while (true)
+        return UpdatePlayer(playerId, state =>
         {
-            if (!_players.TryGetValue(playerId, out var state)) return false;
-
             int boardSlot = Array.IndexOf(state.BoardEchoInstanceIds, echoInstanceId);
-            if (boardSlot == -1) return false;
+            if (boardSlot == -1) return null;
 
             int emptyBench = Array.IndexOf(state.BenchEchoInstanceIds, -1);
-            if (emptyBench == -1) return false;
+            if (emptyBench == -1) return null;
 
             int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
@@ -310,57 +244,41 @@ public class PlayerManager
             newBench[emptyBench] = echoInstanceId;
 
             var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
-            var newState = state with
+            return state with
             {
                 BoardEchoInstanceIds = newBoard,
                 BenchEchoInstanceIds = newBench,
                 ActiveResonances = resonances,
             };
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return true;
-            }
-        }
+        });
     }
 
     public bool TryMoveToBoard(int playerId, int echoInstanceId, int boardIndex)
     {
-        while (true)
+        return UpdatePlayer(playerId, state =>
         {
-            if (!_players.TryGetValue(playerId, out var state)) return false;
+            if (boardIndex < 0 || boardIndex >= _settings.BoardSlots) return null;
 
-            if (boardIndex < 0 || boardIndex >= _settings.BoardSlots) return false;
-
-            // Count units currently on board
             int unitsOnBoard = state.BoardEchoInstanceIds.Count(id => id != -1);
-            if (unitsOnBoard >= state.Level) return false; // Exceeded level limit
+            if (unitsOnBoard >= state.Level) return null;
 
-            // Find unit in bench
             int benchSlot = Array.IndexOf(state.BenchEchoInstanceIds, echoInstanceId);
-            if (benchSlot == -1) return false; // Not found on bench
+            if (benchSlot == -1) return null;
 
-            // Check if board spot is empty
-            if (state.BoardEchoInstanceIds[boardIndex] != -1) return false;
+            if (state.BoardEchoInstanceIds[boardIndex] != -1) return null;
 
             int[] newBench = (int[])state.BenchEchoInstanceIds.Clone();
             int[] newBoard = (int[])state.BoardEchoInstanceIds.Clone();
-
             newBench[benchSlot] = -1;
             newBoard[boardIndex] = echoInstanceId;
 
             var resonances = ResonanceCalculator.Calculate(newBoard, _resonanceSettings.Thresholds);
-            var newState = state with
+            return state with
             {
                 BenchEchoInstanceIds = newBench,
                 BoardEchoInstanceIds = newBoard,
                 ActiveResonances = resonances,
             };
-            if (_players.TryUpdate(playerId, newState, state))
-            {
-                OnPlayerStateChanged?.Invoke(playerId, newState);
-                return true;
-            }
-        }
+        });
     }
 }

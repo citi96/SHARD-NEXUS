@@ -11,21 +11,13 @@ public class RepositionHandler : IInterventionHandler
 
     public void Handle(PendingIntervention intervention, List<CombatUnit> units, InterventionSettings settings, ICombatEventDispatcher dispatcher)
     {
-        var target = units.FirstOrDefault(u => u.InstanceId == intervention.TargetId && u.IsAlive);
-        if (target != null && target.Team == intervention.Team)
+        var target = InterventionProcessor.FindAllyTarget(units, intervention);
+        if (target == null) return;
+
+        var freeCells = new CombatBoard(units).GetAdjacentFreeCells(target);
+        if (freeCells.Count > 0)
         {
-            // Logic to find adjacent free cell
-            var occupied = units.Where(u => u.IsAlive && !u.IsRetreating).Select(u => (u.Col, u.Row)).ToHashSet();
-            foreach (var (dc, dr) in new[] { (0, 1), (0, -1), (1, 0), (-1, 0) })
-            {
-                int nc = target.Col + dc, nr = target.Row + dr;
-                if (nc >= 0 && nc < 14 && nr >= 0 && nr < 4 && !occupied.Contains((nc, nr)))
-                {
-                    target.Col = nc;
-                    target.Row = nr;
-                    break;
-                }
-            }
+            (target.Col, target.Row) = freeCells[0];
         }
     }
 }

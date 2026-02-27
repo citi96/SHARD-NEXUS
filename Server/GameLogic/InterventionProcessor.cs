@@ -26,4 +26,12 @@ public static class InterventionProcessor
             handler.Handle(intervention, units, settings, dispatcher);
         }
     }
+
+    /// <summary>Finds a living ally matching <see cref="PendingIntervention.TargetId"/>.</summary>
+    internal static CombatUnit? FindAllyTarget(List<CombatUnit> units, PendingIntervention inv)
+        => units.FirstOrDefault(u => u.InstanceId == inv.TargetId && u.IsAlive && u.Team == inv.Team);
+
+    /// <summary>Finds a living enemy matching <see cref="PendingIntervention.TargetId"/>.</summary>
+    internal static CombatUnit? FindEnemyTarget(List<CombatUnit> units, PendingIntervention inv)
+        => units.FirstOrDefault(u => u.InstanceId == inv.TargetId && u.IsAlive && u.Team != inv.Team);
 }

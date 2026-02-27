@@ -11,8 +11,8 @@ public class BarrierHandler : IInterventionHandler
 
     public void Handle(PendingIntervention intervention, List<CombatUnit> units, InterventionSettings settings, ICombatEventDispatcher dispatcher)
     {
-        var target = units.FirstOrDefault(u => u.InstanceId == intervention.TargetId && u.IsAlive);
-        if (target != null && target.Team == intervention.Team)
+        var target = InterventionProcessor.FindAllyTarget(units, intervention);
+        if (target != null)
         {
             target.Shield += settings.BarrierShieldHp;
         }

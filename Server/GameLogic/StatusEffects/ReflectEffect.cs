@@ -33,11 +33,7 @@ public class ReflectEffect : BaseBuffEffect
                 StatusEffectId = "Reflect"
             });
 
-            if (context.Attacker.Hp <= 0 && context.Attacker.IsAlive)
-            {
-                context.Attacker.IsAlive = false;
-                context.Dispatcher.Dispatch(new CombatEventRecord { Type = "death", Target = context.Attacker.InstanceId });
-            }
+            context.Attacker.TryMarkDead(context.Dispatcher);
         }
     }
 
